@@ -139,7 +139,9 @@ func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
 				if dump && contains([]string{"secrets", "configmaps", "pods", "services"}, r) {
 					if contains(allowed, "get") || contains(allowed, "list") {
 						dumpData := e.dumpResource(ns, r)
-						nsPerms.Dumps[r] = dumpData
+						if dumpData != "" && !strings.Contains(dumpData, "error:") {
+							nsPerms.Dumps[r] = dumpData
+						}
 					}
 				}
 			}

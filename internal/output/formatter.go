@@ -191,6 +191,14 @@ func (f *Formatter) analyzeResource(resource string, verbs []string, explain boo
 		}
 	}
 
+	// ConfigMap access (can contain secrets, env vars, configs)
+	if resource == "configmaps" && (contains(verbs, "get") || contains(verbs, "list")) {
+		flags = append(flags, " <<! INTERESTING: can read configmaps !>>")
+		if explain {
+			flags = append(flags, "\n    [EXPLAIN] ConfigMaps may contain secrets, environment variables, or configuration data. Use --dump to inspect contents.")
+		}
+	}
+
 	// Pod creation
 	if resource == "pods" && contains(verbs, "create") {
 		flags = append(flags, " <<!! ESCALATION: can create pods !!>>")

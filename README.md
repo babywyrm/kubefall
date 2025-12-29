@@ -10,22 +10,6 @@ A practical, operator-focused Kubernetes enumeration framework that works across
 
 Think "linpeas + kube-hunter + custom k3s weirdness", but readable and hackable.
 
-## 🏗️ Architecture
-
-```
-kubefall/
-├── cmd/kubeenum/          # Main CLI entrypoint
-├── internal/
-│   ├── rbac/              # RBAC enumeration engine (SSAR-based)
-│   ├── context/           # Environment detection (k3s, EKS, GKE, AKS)
-│   ├── discovery/         # Dynamic API discovery (CRDs, aggregated APIs)
-│   ├── analysis/          # Capability mapping & escalation paths
-│   ├── dump/              # Structured resource extraction
-│   └── output/            # Output formatters (red/blue/audit modes)
-├── rules/                 # Escalation rules & MITRE mappings
-└── docs/                  # Attack paths & detection guidance
-```
-
 ## 🚀 Quick Start
 
 ### Build
@@ -44,10 +28,10 @@ make build-linux
 # Basic enumeration
 ./bin/kubeenum
 
-# Dump readable resources
+# Dump readable resources (secrets, configmaps, pods, services)
 ./bin/kubeenum --dump
 
-# JSON output
+# JSON output for automation
 ./bin/kubeenum --json
 
 # Blue team mode (detection-focused)
@@ -57,34 +41,7 @@ make build-linux
 ./bin/kubeenum --mode audit
 ```
 
-## 🔧 Features
-
-### ✅ Phase 1 (Current)
-
-- [x] SSAR-based RBAC enumeration (works without kubectl)
-- [x] JWT token introspection
-- [x] Namespace discovery with graceful fallback
-- [x] Environment detection (k3s, EKS, GKE, AKS)
-- [x] Multi-mode output (red/blue/audit)
-- [x] Escalation heuristics (secrets, clusterroles, pods)
-
-### 🚧 Phase 2 (In Progress)
-
-- [ ] Dynamic API discovery (CRDs, aggregated APIs)
-- [ ] Capability mapping & escalation path analysis
-- [ ] Structured resource extraction (secrets, configmaps)
-- [ ] Token reuse detection
-- [ ] Network & service discovery
-
-### 📋 Phase 3 (Planned)
-
-- [ ] Pod & workload abuse path detection
-- [ ] Node & runtime enumeration (k3s-specific)
-- [ ] MITRE ATT&CK mapping
-- [ ] Falco rule generation
-- [ ] CI/CD integration (SARIF output)
-
-## 🧭 How It Works
+## 🔧 How It Works
 
 ### Core Principle: SelfSubjectAccessReview (SSAR)
 
@@ -97,40 +54,72 @@ Unlike most enum tools that require RBAC read permissions, `kubefall` uses the K
 
 ### Environment Detection
 
-The tool automatically detects:
-- **k3s**: `/etc/rancher/k3s/k3s.yaml`, embedded etcd
-- **EKS**: AWS_REGION, OIDC issuer patterns
+Automatically detects:
+- **k3s**: Token audience contains "k3s", `/etc/rancher/k3s/k3s.yaml`
+- **EKS**: AWS_REGION, OIDC issuer patterns (`oidc.eks.*`)
 - **GKE**: GKE_PROJECT, GKE metadata server
 - **AKS**: AZURE_TENANT_ID, federated token files
 - **Vanilla k8s**: Default fallback
 
-## 📖 Examples
+### What It Checks
 
-### Red Team Mode (Default)
+**Namespace Resources:**
+- secrets, configmaps, pods, services
+- deployments, daemonsets, statefulsets
+- roles, rolebindings
 
-```bash
-$ ./bin/kubeenum
+**Cluster Resources:**
+- nodes, namespaces
+- clusterroles, clusterrolebindings
+
+**Escalation Detection:**
+- 🔴 Can read secrets → credential exposure
+- 🔴 Can create pods → potential node escape
+- 🔴 Can create clusterroles/clusterrolebindings → cluster-admin path
+- 🟡 Can read configmaps → may contain secrets/env vars
+- 🟡 Can create rolebindings → namespace privilege escalation
+
+## 📖 Example Output
+
+```
+=== ENVIRONMENT ===
+Type: k3s
+Distribution: k3s
+Metadata:
+  issuer: https://kubernetes.default.svc.cluster.local
+  serviceaccount: system:serviceaccount:internal:flask-rage-sa
+
 === SERVICE ACCOUNT ===
-Current namespace: default
+Current namespace: internal
 Token Claims:
-  sub: system:serviceaccount:default:my-sa
-  iss: https://kubernetes.default.svc.cluster.local
+  sub: system:serviceaccount:internal:flask-rage-sa
+  aud: [https://kubernetes.default.svc.cluster.local k3s]
 
 === NAMESPACE RESOURCES ===
--- Namespace: default --
-secrets              -> get,list <<!! ESCALATION: can read secrets !!>>
-pods                 -> create <<!! ESCALATION: can create pods !!>>
+-- Namespace: dev-internal --
+configmaps           -> get,list <<! INTERESTING: can read configmaps !>>
+
+-- Namespace: internal --
+configmaps           -> get,list <<! INTERESTING: can read configmaps !>>
+
+=== CLUSTER RESOURCES ===
+namespaces           -> get,list
+
+=== SUMMARY ===
+✓ No obvious escalation paths detected
 ```
 
-### Blue Team Mode
+## 🏗️ Architecture
 
-```bash
-$ ./bin/kubeenum --mode blue --explain
-[INFO] Detected environment: EKS
-[WARNING] ServiceAccount can read secrets
-  [EXPLAIN] Reading secrets can expose credentials, tokens, and keys for lateral movement
-[CRITICAL] ServiceAccount can create pods
-  [EXPLAIN] Pod creation with hostPath/privileged can lead to node compromise
+```
+kubefall/
+├── cmd/kubeenum/          # Main CLI entrypoint
+├── internal/
+│   ├── rbac/              # RBAC enumeration engine (SSAR-based)
+│   ├── context/           # Environment detection
+│   └── output/            # Output formatters (red/blue/audit modes)
+├── Makefile               # Build automation
+└── README.md              # This file
 ```
 
 ## 🛠️ Development
@@ -144,9 +133,77 @@ $ ./bin/kubeenum --mode blue --explain
 
 ### Adding New Checks
 
-1. Add resource to `internal/rbac/enumerator.go`
-2. Add escalation rule to `internal/analysis/`
+1. Add resource to `internal/rbac/enumerator.go` (nsResources or clusterResources)
+2. Add escalation rule to `internal/output/formatter.go` (analyzeResource function)
 3. Update output formatter if needed
+
+## 🧪 Testing
+
+### Local Testing with kind
+
+```bash
+# Create cluster
+kind create cluster
+
+# Create test ServiceAccount
+kubectl create serviceaccount test-sa -n default
+
+# Create pod with ServiceAccount
+kubectl run test-pod --image=busybox --serviceaccount=test-sa -- sleep 3600
+
+# Copy binary into pod
+kubectl cp bin/kubeenum default/test-pod:/kubeenum
+
+# Execute
+kubectl exec -it test-pod -- /kubeenum
+```
+
+### Testing on k3s
+
+```bash
+# Install k3s
+curl -sfL https://get.k3s.io | sh -
+
+# Create test ServiceAccount and pod
+kubectl create serviceaccount test-sa -n default
+kubectl run test-pod --image=busybox --serviceaccount=test-sa -- sleep 3600
+
+# Copy and run
+kubectl cp bin/kubeenum-linux default/test-pod:/kubeenum
+kubectl exec -it test-pod -- /kubeenum
+```
+
+## 🐛 Troubleshooting
+
+**"Error: Failed to initialize RBAC enumerator"**
+- Ensure you're running inside a pod with ServiceAccount mounted at `/var/run/secrets/kubernetes.io/serviceaccount/`
+
+**"Warning: Could not fully detect context"**
+- This is a warning, not an error. Enumeration will still work.
+
+**No permissions shown**
+- This is expected! The tool shows what you CAN do, not what you can't.
+
+## 📋 Roadmap
+
+### Phase 1 ✅ (Complete)
+- SSAR-based RBAC enumeration
+- JWT token introspection
+- Environment detection (k3s, EKS, GKE, AKS)
+- Multi-mode output (red/blue/audit)
+- Escalation heuristics
+
+### Phase 2 🚧 (Next)
+- Dynamic API discovery (CRDs, aggregated APIs)
+- ConfigMap/Secret content analysis
+- Capability mapping & attack paths
+- Token reuse detection
+
+### Phase 3 📋 (Planned)
+- Network & service discovery
+- Pod & workload abuse paths
+- Node & runtime enumeration (k3s-specific)
+- MITRE ATT&CK mapping
 
 ## 📝 License
 
