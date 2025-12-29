@@ -12,10 +12,11 @@ import (
 
 func main() {
 	var (
-		dump    = flag.Bool("dump", false, "Dump resources if readable (secrets, configmaps, pods, services)")
+		dump    = flag.Bool("dump", false, "Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)")
 		jsonOut = flag.Bool("json", false, "Output results in JSON (machine-readable)")
 		mode    = flag.String("mode", "red", "Output mode: red (exploit-focused), blue (detection-focused), audit (compliance)")
 		explain = flag.Bool("explain", false, "Explain why findings are significant")
+		verbose = flag.Bool("verbose", false, "Show detailed progress of what is being checked")
 	)
 
 	flag.Usage = func() {
@@ -26,10 +27,11 @@ Usage:
   kubeenum [options]
 
 Options:
-  --dump       Dump resources if readable (secrets, configmaps, pods, services)
+  --dump       Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)
   --json       Output results in JSON (machine-readable)
   --mode       Output mode: red (exploit-focused), blue (detection-focused), audit (compliance) [default: red]
   --explain    Explain why findings are significant
+  --verbose    Show detailed progress of what is being checked
   -h, --help   Show this help message
 
 Examples:
@@ -51,7 +53,7 @@ Examples:
 	}
 
 	// Initialize RBAC enumerator
-	enumerator, err := rbac.NewEnumerator()
+	enumerator, err := rbac.NewEnumerator(*verbose)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: Failed to initialize RBAC enumerator: %v\n", err)
 		os.Exit(1)

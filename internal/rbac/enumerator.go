@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -20,14 +21,47 @@ const (
 )
 
 var verbs = []string{"get", "list", "create", "update", "delete", "patch"}
-var nsResources = []string{"configmaps", "secrets", "pods", "services", "deployments", "daemonsets", "statefulsets", "roles", "rolebindings"}
-var clusterResources = []string{"nodes", "namespaces", "clusterroles", "clusterrolebindings"}
+
+// Namespace-scoped resources (comprehensive list)
+var nsResources = []string{
+	// Core resources
+	"configmaps", "secrets", "pods", "services", "endpoints", "events",
+	// Workloads
+	"deployments", "daemonsets", "statefulsets", "replicasets", "jobs", "cronjobs",
+	// RBAC
+	"roles", "rolebindings", "serviceaccounts",
+	// Networking
+	"ingresses", "networkpolicies",
+	// Storage
+	"persistentvolumeclaims",
+	// Config
+	"limitranges", "resourcequotas",
+	// Autoscaling
+	"horizontalpodautoscalers",
+}
+
+// Cluster-scoped resources
+var clusterResources = []string{
+	// Core
+	"nodes", "namespaces", "persistentvolumes",
+	// RBAC
+	"clusterroles", "clusterrolebindings",
+	// Storage
+	"storageclasses", "volumeattachments",
+	// Extensions
+	"customresourcedefinitions", "apiservices",
+	// Webhooks (can be used for privilege escalation)
+	"mutatingwebhookconfigurations", "validatingwebhookconfigurations",
+	// Security
+	"podsecuritypolicies", // Deprecated but still exists in older clusters
+}
 
 type Enumerator struct {
 	client    *http.Client
 	token     string
 	namespace string
 	claims    map[string]interface{}
+	verbose   bool
 }
 
 type Results struct {
@@ -77,7 +111,7 @@ type namespaceList struct {
 	} `json:"items"`
 }
 
-func NewEnumerator() (*Enumerator, error) {
+func NewEnumerator(verbose bool) (*Enumerator, error) {
 	token, err := ioutil.ReadFile(tokenFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read token: %w", err)
@@ -101,11 +135,21 @@ func NewEnumerator() (*Enumerator, error) {
 		token:     strings.TrimSpace(string(token)),
 		namespace: strings.TrimSpace(string(namespace)),
 		claims:    claims,
+		verbose:   verbose,
 	}, nil
 }
 
 func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
+	if e.verbose {
+		fmt.Fprintf(os.Stderr, "[*] Starting enumeration...\n")
+		fmt.Fprintf(os.Stderr, "[*] Checking %d namespace resources across all namespaces\n", len(nsResources))
+		fmt.Fprintf(os.Stderr, "[*] Checking %d cluster resources\n", len(clusterResources))
+	}
+
 	namespaces := e.getNamespaces()
+	if e.verbose {
+		fmt.Fprintf(os.Stderr, "[*] Discovered %d namespace(s): %s\n", len(namespaces), strings.Join(namespaces, ", "))
+	}
 
 	results := &Results{
 		Namespace: e.namespace,
@@ -119,25 +163,42 @@ func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
 	}
 
 	// Enumerate namespace resources
+	if e.verbose {
+		fmt.Fprintf(os.Stderr, "\n[*] Enumerating namespace resources...\n")
+	}
 	for _, ns := range namespaces {
+		if e.verbose {
+			fmt.Fprintf(os.Stderr, "[*] Checking namespace: %s\n", ns)
+		}
 		nsPerms := NamespacePermissions{
 			Resources: make(map[string][]string),
 			Dumps:     make(map[string]string),
 		}
 
 		for _, r := range nsResources {
+			if e.verbose {
+				fmt.Fprintf(os.Stderr, "  [*] Checking resource: %s\n", r)
+			}
 			allowed := []string{}
 			for _, v := range verbs {
 				if e.checkAccess(r, v, ns) {
 					allowed = append(allowed, v)
+					if e.verbose {
+						fmt.Fprintf(os.Stderr, "    [+] %s/%s: ALLOWED\n", r, v)
+					}
+				} else if e.verbose {
+					fmt.Fprintf(os.Stderr, "    [-] %s/%s: denied\n", r, v)
 				}
 			}
 			if len(allowed) > 0 {
 				nsPerms.Resources[r] = allowed
 
 				// Dump resources if requested and readable
-				if dump && contains([]string{"secrets", "configmaps", "pods", "services"}, r) {
+				if dump && contains([]string{"secrets", "configmaps", "pods", "services", "serviceaccounts"}, r) {
 					if contains(allowed, "get") || contains(allowed, "list") {
+						if e.verbose {
+							fmt.Fprintf(os.Stderr, "    [*] Dumping %s...\n", r)
+						}
 						dumpData := e.dumpResource(ns, r)
 						if dumpData != "" && !strings.Contains(dumpData, "error:") {
 							nsPerms.Dumps[r] = dumpData
@@ -151,16 +212,31 @@ func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
 	}
 
 	// Enumerate cluster resources
+	if e.verbose {
+		fmt.Fprintf(os.Stderr, "\n[*] Enumerating cluster resources...\n")
+	}
 	for _, r := range clusterResources {
+		if e.verbose {
+			fmt.Fprintf(os.Stderr, "  [*] Checking resource: %s\n", r)
+		}
 		allowed := []string{}
 		for _, v := range verbs {
 			if e.checkAccess(r, v, "") {
 				allowed = append(allowed, v)
+				if e.verbose {
+					fmt.Fprintf(os.Stderr, "    [+] %s/%s: ALLOWED\n", r, v)
+				}
+			} else if e.verbose {
+				fmt.Fprintf(os.Stderr, "    [-] %s/%s: denied\n", r, v)
 			}
 		}
 		if len(allowed) > 0 {
 			results.Permissions.Cluster.Resources[r] = allowed
 		}
+	}
+
+	if e.verbose {
+		fmt.Fprintf(os.Stderr, "\n[*] Enumeration complete\n\n")
 	}
 
 	return results, nil
@@ -225,8 +301,19 @@ func (e *Enumerator) getNamespaces() []string {
 
 func (e *Enumerator) dumpResource(ns, resource string) string {
 	url := fmt.Sprintf("%s/api/v1/namespaces/%s/%s", apiServer, ns, resource)
-	if resource == "deployments" || resource == "daemonsets" || resource == "statefulsets" {
+	// Handle different API groups
+	if contains([]string{"deployments", "daemonsets", "statefulsets", "replicasets"}, resource) {
 		url = fmt.Sprintf("%s/apis/apps/v1/namespaces/%s/%s", apiServer, ns, resource)
+	} else if resource == "jobs" {
+		url = fmt.Sprintf("%s/apis/batch/v1/namespaces/%s/%s", apiServer, ns, resource)
+	} else if resource == "cronjobs" {
+		url = fmt.Sprintf("%s/apis/batch/v1/namespaces/%s/%s", apiServer, ns, resource)
+	} else if resource == "horizontalpodautoscalers" {
+		url = fmt.Sprintf("%s/apis/autoscaling/v2/namespaces/%s/%s", apiServer, ns, resource)
+	} else if resource == "ingresses" {
+		url = fmt.Sprintf("%s/apis/networking.k8s.io/v1/namespaces/%s/%s", apiServer, ns, resource)
+	} else if resource == "networkpolicies" {
+		url = fmt.Sprintf("%s/apis/networking.k8s.io/v1/namespaces/%s/%s", apiServer, ns, resource)
 	}
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+e.token)

@@ -223,6 +223,52 @@ func (f *Formatter) analyzeResource(resource string, verbs []string, explain boo
 		}
 	}
 
+	// ServiceAccount access
+	if resource == "serviceaccounts" && (contains(verbs, "get") || contains(verbs, "list")) {
+		flags = append(flags, " <<! INTERESTING: can read serviceaccounts !>>")
+		if explain {
+			flags = append(flags, "\n    [EXPLAIN] ServiceAccounts may have tokens or be used for impersonation")
+		}
+	}
+	if resource == "serviceaccounts" && contains(verbs, "create") {
+		flags = append(flags, " <<!! ESCALATION: can create serviceaccounts !!>>")
+		if explain {
+			flags = append(flags, "\n    [EXPLAIN] Creating ServiceAccounts can lead to token extraction and privilege escalation")
+		}
+	}
+
+	// Webhook configurations (cluster-wide privilege escalation)
+	if (resource == "mutatingwebhookconfigurations" || resource == "validatingwebhookconfigurations") && contains(verbs, "create") {
+		flags = append(flags, " <<!! CRITICAL: can create webhook configs !!>>")
+		if explain {
+			flags = append(flags, "\n    [EXPLAIN] Webhook configurations can intercept and modify API requests, leading to cluster compromise")
+		}
+	}
+
+	// CRD creation (can create new resource types)
+	if resource == "customresourcedefinitions" && contains(verbs, "create") {
+		flags = append(flags, " <<!! ESCALATION: can create CRDs !!>>")
+		if explain {
+			flags = append(flags, "\n    [EXPLAIN] Creating CRDs can enable new attack surfaces and resource types")
+		}
+	}
+
+	// Ingress creation (can expose services)
+	if resource == "ingresses" && contains(verbs, "create") {
+		flags = append(flags, " <<! INTERESTING: can create ingresses !>>")
+		if explain {
+			flags = append(flags, "\n    [EXPLAIN] Ingress creation can expose internal services externally")
+		}
+	}
+
+	// NetworkPolicy (can affect network access)
+	if resource == "networkpolicies" && contains(verbs, "create") {
+		flags = append(flags, " <<! INTERESTING: can create networkpolicies !>>")
+		if explain {
+			flags = append(flags, "\n    [EXPLAIN] NetworkPolicy creation can affect pod-to-pod communication")
+		}
+	}
+
 	// Wildcard detection
 	if contains(verbs, "*") {
 		flags = append(flags, " <<!! WILDCARD VERBS !!>>")

@@ -39,6 +39,9 @@ make build-linux
 
 # Audit mode (compliance-focused)
 ./bin/kubeenum --mode audit
+
+# Verbose mode (see what's being checked)
+./bin/kubeenum --verbose
 ```
 
 ## 🔧 How It Works
@@ -63,21 +66,27 @@ Automatically detects:
 
 ### What It Checks
 
-**Namespace Resources:**
-- secrets, configmaps, pods, services
-- deployments, daemonsets, statefulsets
-- roles, rolebindings
+**Namespace Resources (20+):**
+- Core: secrets, configmaps, pods, services, endpoints, events
+- Workloads: deployments, daemonsets, statefulsets, replicasets, jobs, cronjobs
+- RBAC: roles, rolebindings, serviceaccounts
+- Networking: ingresses, networkpolicies
+- Storage: persistentvolumeclaims
+- Config: limitranges, resourcequotas
+- Autoscaling: horizontalpodautoscalers
 
-**Cluster Resources:**
-- nodes, namespaces
-- clusterroles, clusterrolebindings
+**Cluster Resources (10+):**
+- Core: nodes, namespaces, persistentvolumes
+- RBAC: clusterroles, clusterrolebindings
+- Storage: storageclasses, volumeattachments
+- Extensions: customresourcedefinitions, apiservices
+- Webhooks: mutatingwebhookconfigurations, validatingwebhookconfigurations
+- Security: podsecuritypolicies (deprecated)
 
 **Escalation Detection:**
-- 🔴 Can read secrets → credential exposure
-- 🔴 Can create pods → potential node escape
-- 🔴 Can create clusterroles/clusterrolebindings → cluster-admin path
-- 🟡 Can read configmaps → may contain secrets/env vars
-- 🟡 Can create rolebindings → namespace privilege escalation
+- 🔴 **Critical**: secrets (read), pods (create), clusterroles/clusterrolebindings (create), webhook configs (create)
+- 🟠 **High**: serviceaccounts (create), rolebindings (create), customresourcedefinitions (create)
+- 🟡 **Interesting**: configmaps (read), serviceaccounts (read), ingresses (create), networkpolicies (create)
 
 ## 📖 Example Output
 
@@ -108,6 +117,30 @@ namespaces           -> get,list
 === SUMMARY ===
 ✓ No obvious escalation paths detected
 ```
+
+### Verbose Mode
+
+```bash
+$ ./bin/kubeenum --verbose
+[*] Starting enumeration...
+[*] Checking 20 namespace resources across all namespaces
+[*] Checking 11 cluster resources
+[*] Discovered 8 namespace(s): default, dev-internal, internal, kube-public, kube-system, wordpress, gatekeeper-system, kube-node-lease
+
+[*] Enumerating namespace resources...
+[*] Checking namespace: dev-internal
+  [*] Checking resource: configmaps
+    [-] configmaps/get: denied
+    [+] configmaps/list: ALLOWED
+    [-] configmaps/create: denied
+    ...
+```
+
+Verbose mode shows:
+- What resources are being checked
+- Each SSAR call (allowed/denied)
+- Which namespaces are being enumerated
+- Progress through the enumeration
 
 ## 🏗️ Architecture
 
