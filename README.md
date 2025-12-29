@@ -66,19 +66,22 @@ Automatically detects:
 
 ### What It Checks
 
-**Namespace Resources (20+):**
+**Namespace Resources (23):**
 - Core: secrets, configmaps, pods, services, endpoints, events
 - Workloads: deployments, daemonsets, statefulsets, replicasets, jobs, cronjobs
+- Templates: podtemplates
 - RBAC: roles, rolebindings, serviceaccounts
 - Networking: ingresses, networkpolicies
 - Storage: persistentvolumeclaims
 - Config: limitranges, resourcequotas
 - Autoscaling: horizontalpodautoscalers
+- Availability: poddisruptionbudgets
 
-**Cluster Resources (10+):**
+**Cluster Resources (13):**
 - Core: nodes, namespaces, persistentvolumes
 - RBAC: clusterroles, clusterrolebindings
 - Storage: storageclasses, volumeattachments
+- Scheduling: priorityclasses, runtimeclasses
 - Extensions: customresourcedefinitions, apiservices
 - Webhooks: mutatingwebhookconfigurations, validatingwebhookconfigurations
 - Security: podsecuritypolicies (deprecated)

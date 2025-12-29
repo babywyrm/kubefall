@@ -269,6 +269,38 @@ func (f *Formatter) analyzeResource(resource string, verbs []string, explain boo
 		}
 	}
 
+	// PodTemplate (can contain secrets/env vars)
+	if resource == "podtemplates" && (contains(verbs, "get") || contains(verbs, "list")) {
+		flags = append(flags, " <<! INTERESTING: can read podtemplates !>>")
+		if explain {
+			flags = append(flags, "\n    [EXPLAIN] PodTemplates may contain secrets, environment variables, or configuration")
+		}
+	}
+
+	// PriorityClass (can affect scheduling)
+	if resource == "priorityclasses" && contains(verbs, "create") {
+		flags = append(flags, " <<! INTERESTING: can create priorityclasses !>>")
+		if explain {
+			flags = append(flags, "\n    [EXPLAIN] PriorityClass creation can affect pod scheduling and preemption")
+		}
+	}
+
+	// RuntimeClass (can affect security contexts)
+	if resource == "runtimeclasses" && contains(verbs, "create") {
+		flags = append(flags, " <<! INTERESTING: can create runtimeclasses !>>")
+		if explain {
+			flags = append(flags, "\n    [EXPLAIN] RuntimeClass creation can affect container runtime and security contexts")
+		}
+	}
+
+	// PodDisruptionBudget (can affect availability)
+	if resource == "poddisruptionbudgets" && contains(verbs, "create") {
+		flags = append(flags, " <<! INTERESTING: can create poddisruptionbudgets !>>")
+		if explain {
+			flags = append(flags, "\n    [EXPLAIN] PodDisruptionBudget creation can affect pod availability during disruptions")
+		}
+	}
+
 	// Wildcard detection
 	if contains(verbs, "*") {
 		flags = append(flags, " <<!! WILDCARD VERBS !!>>")

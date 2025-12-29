@@ -28,6 +28,8 @@ var nsResources = []string{
 	"configmaps", "secrets", "pods", "services", "endpoints", "events",
 	// Workloads
 	"deployments", "daemonsets", "statefulsets", "replicasets", "jobs", "cronjobs",
+	// Workload templates
+	"podtemplates",
 	// RBAC
 	"roles", "rolebindings", "serviceaccounts",
 	// Networking
@@ -38,6 +40,8 @@ var nsResources = []string{
 	"limitranges", "resourcequotas",
 	// Autoscaling
 	"horizontalpodautoscalers",
+	// Availability
+	"poddisruptionbudgets",
 }
 
 // Cluster-scoped resources
@@ -48,6 +52,8 @@ var clusterResources = []string{
 	"clusterroles", "clusterrolebindings",
 	// Storage
 	"storageclasses", "volumeattachments",
+	// Scheduling
+	"priorityclasses", "runtimeclasses",
 	// Extensions
 	"customresourcedefinitions", "apiservices",
 	// Webhooks (can be used for privilege escalation)
@@ -314,6 +320,8 @@ func (e *Enumerator) dumpResource(ns, resource string) string {
 		url = fmt.Sprintf("%s/apis/networking.k8s.io/v1/namespaces/%s/%s", apiServer, ns, resource)
 	} else if resource == "networkpolicies" {
 		url = fmt.Sprintf("%s/apis/networking.k8s.io/v1/namespaces/%s/%s", apiServer, ns, resource)
+	} else if resource == "poddisruptionbudgets" {
+		url = fmt.Sprintf("%s/apis/policy/v1/namespaces/%s/%s", apiServer, ns, resource)
 	}
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+e.token)
