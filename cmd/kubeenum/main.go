@@ -83,4 +83,3 @@ Examples:
 		formatter.OutputHuman(results, os.Stdout)
 	}
 }
-

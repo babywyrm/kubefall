@@ -126,29 +126,52 @@ func DetectFromToken(claims map[string]interface{}) (*Context, error) {
 		ctx = &Context{Metadata: make(map[string]string)}
 	}
 
+	// Check audience for k3s (k3s includes "k3s" in token audience)
+	if aud, ok := claims["aud"]; ok {
+		switch v := aud.(type) {
+		case []interface{}:
+			for _, a := range v {
+				if str, ok := a.(string); ok && str == "k3s" {
+					ctx.Type = "k3s"
+					ctx.Distribution = "k3s"
+					ctx.Metadata["detected_via"] = "token_audience"
+				}
+			}
+		case string:
+			if v == "k3s" {
+				ctx.Type = "k3s"
+				ctx.Distribution = "k3s"
+				ctx.Metadata["detected_via"] = "token_audience"
+			}
+		}
+	}
+
 	// Extract issuer from claims
 	if iss, ok := claims["iss"].(string); ok {
 		ctx.Metadata["issuer"] = iss
 
-		// EKS uses OIDC issuer pattern
-		if strings.Contains(iss, "oidc.eks") || strings.Contains(iss, "eks.amazonaws.com") {
-			ctx.Type = "eks"
-			ctx.Cloud = "aws"
-			ctx.Distribution = "k8s"
-		}
+		// Only override if we haven't detected k3s yet
+		if ctx.Type != "k3s" {
+			// EKS uses OIDC issuer pattern
+			if strings.Contains(iss, "oidc.eks") || strings.Contains(iss, "eks.amazonaws.com") {
+				ctx.Type = "eks"
+				ctx.Cloud = "aws"
+				ctx.Distribution = "k8s"
+			}
 
-		// GKE uses GCP OIDC
-		if strings.Contains(iss, "gke") || strings.Contains(iss, "googleapis.com") {
-			ctx.Type = "gke"
-			ctx.Cloud = "gcp"
-			ctx.Distribution = "k8s"
-		}
+			// GKE uses GCP OIDC
+			if strings.Contains(iss, "gke") || strings.Contains(iss, "googleapis.com") {
+				ctx.Type = "gke"
+				ctx.Cloud = "gcp"
+				ctx.Distribution = "k8s"
+			}
 
-		// AKS uses Azure AD
-		if strings.Contains(iss, "azure") || strings.Contains(iss, "microsoftonline.com") {
-			ctx.Type = "aks"
-			ctx.Cloud = "azure"
-			ctx.Distribution = "k8s"
+			// AKS uses Azure AD
+			if strings.Contains(iss, "azure") || strings.Contains(iss, "microsoftonline.com") {
+				ctx.Type = "aks"
+				ctx.Cloud = "azure"
+				ctx.Distribution = "k8s"
+			}
 		}
 	}
 

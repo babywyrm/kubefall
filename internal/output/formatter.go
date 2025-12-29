@@ -83,41 +83,100 @@ func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
 
 	// Namespace resources
 	fmt.Fprintf(w, "\n=== NAMESPACE RESOURCES ===\n")
+	hasAnyPermissions := false
 	for ns, perms := range results.Permissions.Namespaces {
-		fmt.Fprintf(w, "\n-- Namespace: %s --\n", ns)
-		for resource, verbs := range perms.Resources {
+		// Count permissions in this namespace
+		nsHasPerms := false
+		for _, verbs := range perms.Resources {
 			if len(verbs) > 0 {
-				flag := f.analyzeResource(resource, verbs, f.explain)
-				fmt.Fprintf(w, "%-20s -> \033[92m%s\033[0m%s\n", resource, strings.Join(verbs, ","), flag)
+				nsHasPerms = true
+				hasAnyPermissions = true
+				break
+			}
+		}
 
-				// Show dumps if available
-				if dump, ok := perms.Dumps[resource]; ok && dump != "" {
-					fmt.Fprintf(w, "  [DUMP] %s\n", resource)
-					if f.mode == ModeRed {
-						// Show truncated dump in red mode
-						lines := strings.Split(dump, "\n")
-						if len(lines) > 10 {
-							fmt.Fprintf(w, "  %s\n  ... (truncated, %d lines total)\n", strings.Join(lines[:10], "\n  "), len(lines))
-						} else {
-							fmt.Fprintf(w, "  %s\n", dump)
+		// Only show namespace if it has permissions
+		if nsHasPerms {
+			fmt.Fprintf(w, "\n-- Namespace: %s --\n", ns)
+			for resource, verbs := range perms.Resources {
+				if len(verbs) > 0 {
+					flag := f.analyzeResource(resource, verbs, f.explain)
+					fmt.Fprintf(w, "%-20s -> \033[92m%s\033[0m%s\n", resource, strings.Join(verbs, ","), flag)
+
+					// Show dumps if available
+					if dump, ok := perms.Dumps[resource]; ok && dump != "" {
+						fmt.Fprintf(w, "  [DUMP] %s\n", resource)
+						if f.mode == ModeRed {
+							// Show truncated dump in red mode
+							lines := strings.Split(dump, "\n")
+							if len(lines) > 10 {
+								fmt.Fprintf(w, "  %s\n  ... (truncated, %d lines total)\n", strings.Join(lines[:10], "\n  "), len(lines))
+							} else {
+								fmt.Fprintf(w, "  %s\n", dump)
+							}
 						}
 					}
 				}
-			} else {
-				fmt.Fprintf(w, "%-20s -> \033[91mNONE\033[0m\n", resource)
 			}
 		}
 	}
 
+	if !hasAnyPermissions {
+		fmt.Fprintf(w, "\n\033[91mNo namespace permissions found\033[0m\n")
+	}
+
 	// Cluster resources
 	fmt.Fprintf(w, "\n=== CLUSTER RESOURCES ===\n")
+	hasClusterPerms := false
 	for resource, verbs := range results.Permissions.Cluster.Resources {
 		if len(verbs) > 0 {
+			hasClusterPerms = true
 			flag := f.analyzeResource(resource, verbs, f.explain)
 			fmt.Fprintf(w, "%-20s -> \033[92m%s\033[0m%s\n", resource, strings.Join(verbs, ","), flag)
-		} else {
-			fmt.Fprintf(w, "%-20s -> \033[91mNONE\033[0m\n", resource)
 		}
+	}
+	if !hasClusterPerms {
+		fmt.Fprintf(w, "\033[91mNo cluster-wide permissions found\033[0m\n")
+	}
+
+	// Summary
+	fmt.Fprintf(w, "\n=== SUMMARY ===\n")
+	escalationCount := 0
+	criticalResources := []string{}
+
+	// Count escalations in namespaces
+	for _, perms := range results.Permissions.Namespaces {
+		for resource, verbs := range perms.Resources {
+			if len(verbs) > 0 {
+				flag := f.analyzeResource(resource, verbs, false)
+				if strings.Contains(flag, "ESCALATION") {
+					escalationCount++
+					if !contains(criticalResources, resource) {
+						criticalResources = append(criticalResources, resource)
+					}
+				}
+			}
+		}
+	}
+
+	// Count escalations in cluster
+	for resource, verbs := range results.Permissions.Cluster.Resources {
+		if len(verbs) > 0 {
+			flag := f.analyzeResource(resource, verbs, false)
+			if strings.Contains(flag, "ESCALATION") {
+				escalationCount++
+				if !contains(criticalResources, resource) {
+					criticalResources = append(criticalResources, resource)
+				}
+			}
+		}
+	}
+
+	if escalationCount > 0 {
+		fmt.Fprintf(w, "\033[91m⚠️  Found %d potential escalation path(s)\033[0m\n", escalationCount)
+		fmt.Fprintf(w, "Critical resources: %s\n", strings.Join(criticalResources, ", "))
+	} else {
+		fmt.Fprintf(w, "\033[92m✓ No obvious escalation paths detected\033[0m\n")
 	}
 }
 

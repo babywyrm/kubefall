@@ -6,7 +6,7 @@ build:
 
 # Build for Linux (for containers/CTFs)
 build-linux:
-	GOOS=linux GOARCH=amd64 go build -o bin/kubeenum-linux ./cmd/kubeenum
+	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/kubeenum-linux ./cmd/kubeenum
 
 # Clean build artifacts
 clean:
