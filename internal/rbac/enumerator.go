@@ -202,8 +202,19 @@ func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
 					if e.verbose {
 						fmt.Fprintf(os.Stderr, "    [+] %s/%s: ALLOWED\n", r, v)
 					}
-				} else if e.verbose {
-					fmt.Fprintf(os.Stderr, "    [-] %s/%s: denied\n", r, v)
+				}
+			}
+			if e.verbose && len(allowed) == 0 {
+				fmt.Fprintf(os.Stderr, "    [-] No permissions\n")
+			} else if e.verbose && len(allowed) > 0 && len(allowed) < len(verbs) {
+				denied := []string{}
+				for _, v := range verbs {
+					if !contains(allowed, v) {
+						denied = append(denied, v)
+					}
+				}
+				if len(denied) > 0 {
+					fmt.Fprintf(os.Stderr, "    [-] Denied: %s\n", strings.Join(denied, ", "))
 				}
 			}
 			if len(allowed) > 0 {
@@ -231,21 +242,32 @@ func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
 	if e.verbose {
 		fmt.Fprintf(os.Stderr, "\n[*] Enumerating cluster resources...\n")
 	}
-	for _, r := range clusterResources {
-		if e.verbose {
-			fmt.Fprintf(os.Stderr, "  [*] Checking resource: %s\n", r)
-		}
-		allowed := []string{}
-		for _, v := range verbs {
-			if e.checkAccess(r, v, "") {
-				allowed = append(allowed, v)
-				if e.verbose {
-					fmt.Fprintf(os.Stderr, "    [+] %s/%s: ALLOWED\n", r, v)
-				}
-			} else if e.verbose {
-				fmt.Fprintf(os.Stderr, "    [-] %s/%s: denied\n", r, v)
+		for _, r := range clusterResources {
+			if e.verbose {
+				fmt.Fprintf(os.Stderr, "  [*] Checking resource: %s\n", r)
 			}
-		}
+			allowed := []string{}
+			for _, v := range verbs {
+				if e.checkAccess(r, v, "") {
+					allowed = append(allowed, v)
+					if e.verbose {
+						fmt.Fprintf(os.Stderr, "    [+] %s/%s: ALLOWED\n", r, v)
+					}
+				}
+			}
+			if e.verbose && len(allowed) == 0 {
+				fmt.Fprintf(os.Stderr, "    [-] No permissions\n")
+			} else if e.verbose && len(allowed) > 0 && len(allowed) < len(verbs) {
+				denied := []string{}
+				for _, v := range verbs {
+					if !contains(allowed, v) {
+						denied = append(denied, v)
+					}
+				}
+				if len(denied) > 0 {
+					fmt.Fprintf(os.Stderr, "    [-] Denied: %s\n", strings.Join(denied, ", "))
+				}
+			}
 		if len(allowed) > 0 {
 			results.Permissions.Cluster.Resources[r] = allowed
 		}
