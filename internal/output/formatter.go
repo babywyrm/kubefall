@@ -261,13 +261,17 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 
 	for key, data := range extracted {
 		if ext, ok := data.(*analysis.ExtractedData); ok {
-			fmt.Fprintf(w, "%s[%s]%s\n", colorYellow, key, colorReset)
+			parts := strings.Split(key, "/")
+			ns := parts[0]
+			resType := parts[1]
+			
+			fmt.Fprintf(w, "%s[%s]%s %s(%s)%s\n", colorYellow, key, colorReset, colorBlue, resType, colorReset)
 			
 			hasData := false
 			
 			if len(ext.Tokens) > 0 {
 				hasData = true
-				fmt.Fprintf(w, "  %sTokens Found:%s\n", colorBold, colorReset)
+				fmt.Fprintf(w, "  %s🔑 Tokens Found:%s\n", colorBold, colorReset)
 				for _, token := range ext.Tokens {
 					fmt.Fprintf(w, "    • Type: %s%s%s", colorBold, token.Type, colorReset)
 					if token.Valid {
@@ -282,7 +286,7 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 
 			if len(ext.Credentials) > 0 {
 				hasData = true
-				fmt.Fprintf(w, "  %sCredentials Found:%s\n", colorBold, colorReset)
+				fmt.Fprintf(w, "  %s🔐 Credentials Found:%s\n", colorBold, colorReset)
 				for _, cred := range ext.Credentials {
 					fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
 						colorBold, cred.Type, colorReset, 
@@ -292,7 +296,7 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 
 			if len(ext.Endpoints) > 0 {
 				hasData = true
-				fmt.Fprintf(w, "  %sEndpoints Found:%s\n", colorBold, colorReset)
+				fmt.Fprintf(w, "  %s🌐 Endpoints Found:%s\n", colorBold, colorReset)
 				for _, endpoint := range ext.Endpoints {
 					fmt.Fprintf(w, "    • %s%s%s\n", colorBlue, endpoint, colorReset)
 				}
@@ -300,38 +304,55 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 
 			if len(ext.Base64Data) > 0 {
 				hasData = true
-				fmt.Fprintf(w, "  %sBase64 Data Found:%s\n", colorBold, colorReset)
+				fmt.Fprintf(w, "  %s📦 Base64 Data Found:%s\n", colorBold, colorReset)
 				for _, b64 := range ext.Base64Data {
-					fmt.Fprintf(w, "    • %s: %s...%s\n", 
-						b64.Key, b64.Decoded[:min(50, len(b64.Decoded))], colorReset)
+					preview := truncate(b64.Decoded, 80)
+					fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
+						colorBold, b64.Key, colorReset,
+						colorYellow, preview, colorReset)
 				}
 			}
 
 			if len(ext.EnvVars) > 0 {
 				hasData = true
-				fmt.Fprintf(w, "  %sEnvironment Variables Found:%s\n", colorBold, colorReset)
+				fmt.Fprintf(w, "  %s⚙️  Config/Env Variables Found:%s\n", colorBold, colorReset)
 				count := 0
 				for k, v := range ext.EnvVars {
-					if count < 5 {
+					if count < 10 {
+						preview := truncate(v, 60)
 						fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
 							colorBold, k, colorReset, 
-							colorYellow, truncate(v, 50), colorReset)
+							colorYellow, preview, colorReset)
 						count++
 					}
 				}
-				if len(ext.EnvVars) > 5 {
-					fmt.Fprintf(w, "    ... and %d more\n", len(ext.EnvVars)-5)
+				if len(ext.EnvVars) > 10 {
+					fmt.Fprintf(w, "    ... and %d more\n", len(ext.EnvVars)-10)
 				}
 			}
 
-			if !hasData {
-				if len(ext.Keys) > 0 {
-					fmt.Fprintf(w, "  %sConfigMap Keys Found:%s\n", colorBold, colorReset)
-					fmt.Fprintf(w, "    %s%s%s\n", colorYellow, strings.Join(ext.Keys, ", "), colorReset)
-					fmt.Fprintf(w, "  %s(No tokens, credentials, or interesting patterns detected)%s\n", colorYellow, colorReset)
+			if len(ext.KeyValues) > 0 {
+				if !hasData {
+					fmt.Fprintf(w, "  %s📋 ConfigMap Contents (%d keys):%s\n", colorBold, len(ext.KeyValues), colorReset)
+					count := 0
+					for k, v := range ext.KeyValues {
+						if count < 15 {
+							preview := truncate(v, 80)
+							fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
+								colorBold, k, colorReset, 
+								colorYellow, preview, colorReset)
+							count++
+						}
+					}
+					if len(ext.KeyValues) > 15 {
+						fmt.Fprintf(w, "    ... and %d more keys\n", len(ext.KeyValues)-15)
+					}
+					fmt.Fprintf(w, "  %s💡 TIP: Use 'kubectl get configmap <name> -n %s -o yaml' for full contents%s\n", colorBlue, ns, colorReset)
 				} else {
-					fmt.Fprintf(w, "  %sNo data found (ConfigMap may be empty)%s\n", colorYellow, colorReset)
+					fmt.Fprintf(w, "  %s📋 All Keys (%d):%s %s%s%s\n", colorBold, len(ext.Keys), colorReset, colorYellow, strings.Join(ext.Keys, ", "), colorReset)
 				}
+			} else if !hasData {
+				fmt.Fprintf(w, "  %sNo data found (ConfigMap may be empty)%s\n", colorYellow, colorReset)
 			}
 
 			fmt.Fprintf(w, "\n")

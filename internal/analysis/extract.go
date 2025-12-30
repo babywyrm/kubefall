@@ -14,6 +14,7 @@ type ExtractedData struct {
 	Endpoints   []string
 	Base64Data  []Base64Info
 	Keys        []string
+	KeyValues   map[string]string
 }
 
 type TokenInfo struct {
@@ -43,6 +44,7 @@ func ExtractFromConfigMap(data string) *ExtractedData {
 		Endpoints:   []string{},
 		Base64Data:  []Base64Info{},
 		Keys:        []string{},
+		KeyValues:   make(map[string]string),
 	}
 
 	var cm struct {
@@ -61,6 +63,7 @@ func ExtractFromConfigMap(data string) *ExtractedData {
 	for _, item := range cm.Items {
 		for key, value := range item.Data {
 			extracted.Keys = append(extracted.Keys, key)
+			extracted.KeyValues[key] = value
 			extracted.analyzeValue(key, value)
 		}
 	}
@@ -76,6 +79,7 @@ func ExtractFromSecret(data string) *ExtractedData {
 		Endpoints:   []string{},
 		Base64Data:  []Base64Info{},
 		Keys:        []string{},
+		KeyValues:   make(map[string]string),
 	}
 
 	var secret struct {
@@ -96,8 +100,10 @@ func ExtractFromSecret(data string) *ExtractedData {
 			extracted.Keys = append(extracted.Keys, key)
 			decoded, err := base64.StdEncoding.DecodeString(value)
 			if err == nil {
+				extracted.KeyValues[key] = string(decoded)
 				extracted.analyzeValue(key, string(decoded))
 			} else {
+				extracted.KeyValues[key] = value
 				extracted.analyzeValue(key, value)
 			}
 		}
@@ -143,7 +149,7 @@ func (e *ExtractedData) analyzeValue(key, value string) {
 		})
 	}
 
-			if strings.Contains(lowerKey, "env") || strings.Contains(lowerKey, "config") || len(value) > 0 {
+			if strings.Contains(lowerKey, "env") || strings.Contains(lowerKey, "config") {
 				e.EnvVars[key] = value
 			}
 }
