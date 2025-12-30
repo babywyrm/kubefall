@@ -108,6 +108,11 @@ Examples:
 	if *dump {
 		extracted := make(map[string]interface{})
 		podSecurityMap := make(map[string]interface{})
+		tokenExtraction := &analysis.TokenExtraction{
+			ServiceAccountTokens: []analysis.ServiceAccountToken{},
+			HighPrivilegeSAs:     []analysis.ServiceAccountInfo{},
+			AllServiceAccounts:   []analysis.ServiceAccountInfo{},
+		}
 
 		for ns, perms := range results.Permissions.Namespaces {
 			if cmData, ok := perms.Dumps["configmaps"]; ok && cmData != "" {
@@ -115,16 +120,47 @@ Examples:
 			}
 			if secretData, ok := perms.Dumps["secrets"]; ok && secretData != "" {
 				extracted[ns+"/secrets"] = analysis.ExtractFromSecret(secretData)
+				// Extract ServiceAccount tokens from secrets
+				saTokens := analysis.ExtractSATokensFromSecrets(secretData)
+				tokenExtraction.ServiceAccountTokens = append(tokenExtraction.ServiceAccountTokens, saTokens...)
 			}
 			if podsData, ok := perms.Dumps["pods"]; ok && podsData != "" {
 				podSecurityMap[ns] = analysis.AnalyzePodSecurity(podsData)
+				// Extract ServiceAccounts from pods
+				saFromPods := analysis.ExtractServiceAccountsFromPods(podsData)
+				tokenExtraction.AllServiceAccounts = append(tokenExtraction.AllServiceAccounts, saFromPods...)
+			}
+			if saData, ok := perms.Dumps["serviceaccounts"]; ok && saData != "" {
+				saFromList := analysis.ExtractServiceAccountsFromSAList(saData)
+				// Merge with existing SAs
+				existingMap := make(map[string]bool)
+				for _, sa := range tokenExtraction.AllServiceAccounts {
+					existingMap[sa.Namespace+":"+sa.Name] = true
+				}
+				for _, sa := range saFromList {
+					key := sa.Namespace + ":" + sa.Name
+					if !existingMap[key] {
+						tokenExtraction.AllServiceAccounts = append(tokenExtraction.AllServiceAccounts, sa)
+					}
+				}
 			}
 		}
+
+		// Identify high-privilege ServiceAccounts
+		for _, sa := range tokenExtraction.AllServiceAccounts {
+			if analysis.IsHighPrivilegeSA(sa.Name) {
+				tokenExtraction.HighPrivilegeSAs = append(tokenExtraction.HighPrivilegeSAs, sa)
+			}
+		}
+
 		if len(extracted) > 0 {
 			results.Extracted = extracted
 		}
 		if len(podSecurityMap) > 0 {
 			results.PodSecurity = podSecurityMap
+		}
+		if len(tokenExtraction.ServiceAccountTokens) > 0 || len(tokenExtraction.HighPrivilegeSAs) > 0 || len(tokenExtraction.AllServiceAccounts) > 0 {
+			results.TokenExtraction = tokenExtraction
 		}
 	}
 

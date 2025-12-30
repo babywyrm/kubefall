@@ -80,6 +80,7 @@ type Results struct {
 	ClusterInfo   interface{} `json:"clusterinfo,omitempty"`
 	PodSecurity   interface{} `json:"podsecurity,omitempty"`
 	RBACAnalysis  interface{} `json:"rbacanalysis,omitempty"`
+	TokenExtraction interface{} `json:"tokenextraction,omitempty"`
 }
 
 type Permissions struct {
