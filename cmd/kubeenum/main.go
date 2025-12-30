@@ -12,6 +12,17 @@ import (
 	"github.com/babywyrm/kubefall/internal/rbac"
 )
 
+func containsAny(slice []string, values []string) bool {
+	for _, v := range slice {
+		for _, val := range values {
+			if v == val {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func main() {
 	var (
 		dump    = flag.Bool("dump", false, "Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)")
@@ -80,6 +91,11 @@ Examples:
 	}
 	results.Context = ctx
 
+	// Discover cluster version
+	if clusterInfo, err := discovery.DiscoverClusterVersion(enumerator.GetClient(), enumerator.GetToken()); err == nil {
+		results.ClusterInfo = clusterInfo
+	}
+
 	// Discover services if we can list them
 	namespaces := []string{results.Namespace}
 	for ns := range results.Permissions.Namespaces {
@@ -91,6 +107,8 @@ Examples:
 	// Extract useful data from dumps
 	if *dump {
 		extracted := make(map[string]interface{})
+		podSecurityMap := make(map[string]interface{})
+
 		for ns, perms := range results.Permissions.Namespaces {
 			if cmData, ok := perms.Dumps["configmaps"]; ok && cmData != "" {
 				extracted[ns+"/configmaps"] = analysis.ExtractFromConfigMap(cmData)
@@ -98,9 +116,26 @@ Examples:
 			if secretData, ok := perms.Dumps["secrets"]; ok && secretData != "" {
 				extracted[ns+"/secrets"] = analysis.ExtractFromSecret(secretData)
 			}
+			if podsData, ok := perms.Dumps["pods"]; ok && podsData != "" {
+				podSecurityMap[ns] = analysis.AnalyzePodSecurity(podsData)
+			}
 		}
 		if len(extracted) > 0 {
 			results.Extracted = extracted
+		}
+		if len(podSecurityMap) > 0 {
+			results.PodSecurity = podSecurityMap
+		}
+	}
+
+	// Analyze RBAC if we can read cluster roles/bindings
+	if clusterRoleBindings, ok := results.Permissions.Cluster.Resources["clusterrolebindings"]; ok {
+		if containsAny(clusterRoleBindings, []string{"get", "list"}) {
+			bindingsData := enumerator.DumpClusterResource("clusterrolebindings")
+			if bindingsData != "" {
+				rbacAnalysis := analysis.AnalyzeClusterRoleBindings(bindingsData)
+				results.RBACAnalysis = rbacAnalysis
+			}
 		}
 	}
 

@@ -86,7 +86,10 @@ func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
 	allNamespaces := f.getAllNamespaces(results)
 
 	f.printHeader(w, results)
+	f.printClusterInfo(w, results)
 	f.printCriticalFindings(w, findings)
+	f.printRBACAnalysis(w, results)
+	f.printPodSecurity(w, results)
 	f.printExtractedData(w, results)
 	f.printServices(w, results)
 	f.printDetailedResults(w, results, findings)

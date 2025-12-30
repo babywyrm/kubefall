@@ -71,12 +71,15 @@ type Enumerator struct {
 }
 
 type Results struct {
-	Namespace   string
-	Claims      map[string]interface{}
-	Permissions Permissions
-	Context     interface{} `json:"context,omitempty"`
-	Services    interface{} `json:"services,omitempty"`
-	Extracted   interface{} `json:"extracted,omitempty"`
+	Namespace     string
+	Claims        map[string]interface{}
+	Permissions   Permissions
+	Context       interface{} `json:"context,omitempty"`
+	Services      interface{} `json:"services,omitempty"`
+	Extracted     interface{} `json:"extracted,omitempty"`
+	ClusterInfo   interface{} `json:"clusterinfo,omitempty"`
+	PodSecurity   interface{} `json:"podsecurity,omitempty"`
+	RBACAnalysis  interface{} `json:"rbacanalysis,omitempty"`
 }
 
 type Permissions struct {
@@ -155,6 +158,31 @@ func (e *Enumerator) GetToken() string {
 	return e.token
 }
 
+func (e *Enumerator) DumpClusterResource(resource string) string {
+	url := fmt.Sprintf("%s/api/v1/%s", apiServer, resource)
+	if resource == "clusterroles" || resource == "clusterrolebindings" {
+		url = fmt.Sprintf("%s/apis/rbac.authorization.k8s.io/v1/%s", apiServer, resource)
+	} else if resource == "customresourcedefinitions" {
+		url = fmt.Sprintf("%s/apis/apiextensions.k8s.io/v1/%s", apiServer, resource)
+	}
+	
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+e.token)
+
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		return ""
+	}
+	
+	body, _ := ioutil.ReadAll(resp.Body)
+	return string(body)
+}
+
 func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
 	if e.verbose {
 		fmt.Fprintf(os.Stderr, "[*] Starting enumeration...\n")
@@ -227,7 +255,7 @@ func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
 							fmt.Fprintf(os.Stderr, "    [*] Dumping %s...\n", r)
 						}
 						dumpData := e.dumpResource(ns, r)
-						if dumpData != "" && !strings.Contains(dumpData, "error:") {
+						if dumpData != "" {
 							nsPerms.Dumps[r] = dumpData
 						}
 					}
@@ -360,9 +388,14 @@ func (e *Enumerator) dumpResource(ns, resource string) string {
 
 	resp, err := e.client.Do(req)
 	if err != nil {
-		return fmt.Sprintf("error: %v", err)
+		return ""
 	}
 	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		return ""
+	}
+	
 	body, _ := ioutil.ReadAll(resp.Body)
 	return string(body)
 }
