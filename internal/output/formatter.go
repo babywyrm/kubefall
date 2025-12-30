@@ -44,12 +44,14 @@ func ParseMode(s string) Mode {
 type Formatter struct {
 	mode    Mode
 	explain bool
+	full    bool
 }
 
-func NewFormatter(mode Mode, explain bool) *Formatter {
+func NewFormatter(mode Mode, explain bool, full bool) *Formatter {
 	return &Formatter{
 		mode:    mode,
 		explain: explain,
+		full:    full,
 	}
 }
 
@@ -306,10 +308,19 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 				hasData = true
 				fmt.Fprintf(w, "  %s📦 Base64 Data Found:%s\n", colorBold, colorReset)
 				for _, b64 := range ext.Base64Data {
-					preview := truncate(b64.Decoded, 80)
-					fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
-						colorBold, b64.Key, colorReset,
-						colorYellow, preview, colorReset)
+					if f.full {
+						fmt.Fprintf(w, "    %s%s%s:\n", colorBold, b64.Key, colorReset)
+						lines := strings.Split(b64.Decoded, "\n")
+						for _, line := range lines {
+							fmt.Fprintf(w, "      %s%s%s\n", colorYellow, line, colorReset)
+						}
+						fmt.Fprintf(w, "\n")
+					} else {
+						preview := truncate(b64.Decoded, 80)
+						fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
+							colorBold, b64.Key, colorReset,
+							colorYellow, preview, colorReset)
+					}
 				}
 			}
 
@@ -318,15 +329,21 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 				fmt.Fprintf(w, "  %s⚙️  Config/Env Variables Found:%s\n", colorBold, colorReset)
 				count := 0
 				for k, v := range ext.EnvVars {
-					if count < 10 {
-						preview := truncate(v, 60)
-						fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
+					if f.full {
+						fmt.Fprintf(w, "    %s%s%s: %s%s%s\n", 
 							colorBold, k, colorReset, 
-							colorYellow, preview, colorReset)
-						count++
+							colorYellow, v, colorReset)
+					} else {
+						if count < 10 {
+							preview := truncate(v, 60)
+							fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
+								colorBold, k, colorReset, 
+								colorYellow, preview, colorReset)
+							count++
+						}
 					}
 				}
-				if len(ext.EnvVars) > 10 {
+				if !f.full && len(ext.EnvVars) > 10 {
 					fmt.Fprintf(w, "    ... and %d more\n", len(ext.EnvVars)-10)
 				}
 			}
@@ -336,20 +353,41 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 					fmt.Fprintf(w, "  %s📋 ConfigMap Contents (%d keys):%s\n", colorBold, len(ext.KeyValues), colorReset)
 					count := 0
 					for k, v := range ext.KeyValues {
-						if count < 15 {
-							preview := truncate(v, 80)
-							fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
-								colorBold, k, colorReset, 
-								colorYellow, preview, colorReset)
-							count++
+						if f.full {
+							fmt.Fprintf(w, "    %s%s%s:\n", colorBold, k, colorReset)
+							lines := strings.Split(v, "\n")
+							for _, line := range lines {
+								fmt.Fprintf(w, "      %s%s%s\n", colorYellow, line, colorReset)
+							}
+							fmt.Fprintf(w, "\n")
+						} else {
+							if count < 15 {
+								preview := truncate(v, 80)
+								fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
+									colorBold, k, colorReset, 
+									colorYellow, preview, colorReset)
+								count++
+							}
 						}
 					}
-					if len(ext.KeyValues) > 15 {
+					if !f.full && len(ext.KeyValues) > 15 {
 						fmt.Fprintf(w, "    ... and %d more keys\n", len(ext.KeyValues)-15)
+						fmt.Fprintf(w, "  %s💡 TIP: Use --full to see all contents, or 'kubectl get configmap <name> -n %s -o yaml'%s\n", colorBlue, ns, colorReset)
+					} else if !f.full {
+						fmt.Fprintf(w, "  %s💡 TIP: Use --full to see full contents%s\n", colorBlue, colorReset)
 					}
-					fmt.Fprintf(w, "  %s💡 TIP: Use 'kubectl get configmap <name> -n %s -o yaml' for full contents%s\n", colorBlue, ns, colorReset)
 				} else {
 					fmt.Fprintf(w, "  %s📋 All Keys (%d):%s %s%s%s\n", colorBold, len(ext.Keys), colorReset, colorYellow, strings.Join(ext.Keys, ", "), colorReset)
+					if f.full {
+						for k, v := range ext.KeyValues {
+							fmt.Fprintf(w, "    %s%s%s:\n", colorBold, k, colorReset)
+							lines := strings.Split(v, "\n")
+							for _, line := range lines {
+								fmt.Fprintf(w, "      %s%s%s\n", colorYellow, line, colorReset)
+							}
+							fmt.Fprintf(w, "\n")
+						}
+					}
 				}
 			} else if !hasData {
 				fmt.Fprintf(w, "  %sNo data found (ConfigMap may be empty)%s\n", colorYellow, colorReset)

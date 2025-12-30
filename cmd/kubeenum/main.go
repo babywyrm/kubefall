@@ -15,6 +15,7 @@ import (
 func main() {
 	var (
 		dump    = flag.Bool("dump", false, "Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)")
+		full    = flag.Bool("full", false, "Print full contents of extracted resources (use with --dump)")
 		jsonOut = flag.Bool("json", false, "Output results in JSON (machine-readable)")
 		mode    = flag.String("mode", "red", "Output mode: red (exploit-focused), blue (detection-focused), audit (compliance)")
 		explain = flag.Bool("explain", false, "Explain why findings are significant")
@@ -30,6 +31,7 @@ Usage:
 
 Options:
   --dump       Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)
+  --full       Print full contents of extracted resources (use with --dump)
   --json       Output results in JSON (machine-readable)
   --mode       Output mode: red (exploit-focused), blue (detection-focused), audit (compliance) [default: red]
   --explain    Explain why findings are significant
@@ -39,6 +41,7 @@ Options:
 Examples:
   kubeenum
   kubeenum --dump
+  kubeenum --dump --full
   kubeenum --json
   kubeenum --json --dump
   kubeenum --mode blue --explain
@@ -103,7 +106,7 @@ Examples:
 
 	// Output results
 	outputMode := output.ParseMode(*mode)
-	formatter := output.NewFormatter(outputMode, *explain)
+	formatter := output.NewFormatter(outputMode, *explain, *full)
 
 	if *jsonOut {
 		formatter.OutputJSON(results, os.Stdout)
