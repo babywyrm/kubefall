@@ -81,12 +81,23 @@ type Findings struct {
 func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
 	findings := f.collectFindings(results)
 
+	allNamespaces := f.getAllNamespaces(results)
+
 	f.printHeader(w, results)
 	f.printCriticalFindings(w, findings)
 	f.printExtractedData(w, results)
 	f.printServices(w, results)
 	f.printDetailedResults(w, results, findings)
-	f.printSummary(w, findings)
+	f.printSummaryWithNamespaces(w, findings, allNamespaces)
+}
+
+func (f *Formatter) getAllNamespaces(results *rbac.Results) []string {
+	namespaces := []string{}
+	for ns := range results.Permissions.Namespaces {
+		namespaces = append(namespaces, ns)
+	}
+	sort.Strings(namespaces)
+	return namespaces
 }
 
 func (f *Formatter) printHeader(w io.Writer, results *rbac.Results) {
@@ -252,7 +263,10 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 		if ext, ok := data.(*analysis.ExtractedData); ok {
 			fmt.Fprintf(w, "%s[%s]%s\n", colorYellow, key, colorReset)
 			
+			hasData := false
+			
 			if len(ext.Tokens) > 0 {
+				hasData = true
 				fmt.Fprintf(w, "  %sTokens Found:%s\n", colorBold, colorReset)
 				for _, token := range ext.Tokens {
 					fmt.Fprintf(w, "    • Type: %s%s%s", colorBold, token.Type, colorReset)
@@ -267,6 +281,7 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 			}
 
 			if len(ext.Credentials) > 0 {
+				hasData = true
 				fmt.Fprintf(w, "  %sCredentials Found:%s\n", colorBold, colorReset)
 				for _, cred := range ext.Credentials {
 					fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
@@ -276,6 +291,7 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 			}
 
 			if len(ext.Endpoints) > 0 {
+				hasData = true
 				fmt.Fprintf(w, "  %sEndpoints Found:%s\n", colorBold, colorReset)
 				for _, endpoint := range ext.Endpoints {
 					fmt.Fprintf(w, "    • %s%s%s\n", colorBlue, endpoint, colorReset)
@@ -283,10 +299,38 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 			}
 
 			if len(ext.Base64Data) > 0 {
+				hasData = true
 				fmt.Fprintf(w, "  %sBase64 Data Found:%s\n", colorBold, colorReset)
 				for _, b64 := range ext.Base64Data {
 					fmt.Fprintf(w, "    • %s: %s...%s\n", 
 						b64.Key, b64.Decoded[:min(50, len(b64.Decoded))], colorReset)
+				}
+			}
+
+			if len(ext.EnvVars) > 0 {
+				hasData = true
+				fmt.Fprintf(w, "  %sEnvironment Variables Found:%s\n", colorBold, colorReset)
+				count := 0
+				for k, v := range ext.EnvVars {
+					if count < 5 {
+						fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
+							colorBold, k, colorReset, 
+							colorYellow, truncate(v, 50), colorReset)
+						count++
+					}
+				}
+				if len(ext.EnvVars) > 5 {
+					fmt.Fprintf(w, "    ... and %d more\n", len(ext.EnvVars)-5)
+				}
+			}
+
+			if !hasData {
+				if len(ext.Keys) > 0 {
+					fmt.Fprintf(w, "  %sConfigMap Keys Found:%s\n", colorBold, colorReset)
+					fmt.Fprintf(w, "    %s%s%s\n", colorYellow, strings.Join(ext.Keys, ", "), colorReset)
+					fmt.Fprintf(w, "  %s(No tokens, credentials, or interesting patterns detected)%s\n", colorYellow, colorReset)
+				} else {
+					fmt.Fprintf(w, "  %sNo data found (ConfigMap may be empty)%s\n", colorYellow, colorReset)
 				}
 			}
 
@@ -300,6 +344,13 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 func (f *Formatter) printServices(w io.Writer, results *rbac.Results) {
@@ -334,9 +385,18 @@ func (f *Formatter) printServices(w io.Writer, results *rbac.Results) {
 }
 
 func (f *Formatter) printSummary(w io.Writer, findings Findings) {
+	f.printSummaryWithNamespaces(w, findings, nil)
+}
+
+func (f *Formatter) printSummaryWithNamespaces(w io.Writer, findings Findings, allNamespaces []string) {
 	fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorBold, colorReset)
 	fmt.Fprintf(w, "%s║%s  %sSUMMARY%s                                                      %s║%s\n", colorBold, colorReset, colorBold, colorReset, colorBold, colorReset)
 	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorBold, colorReset)
+
+	if allNamespaces != nil && len(allNamespaces) > 0 {
+		fmt.Fprintf(w, "%s[%d] NAMESPACES DISCOVERED%s\n", colorBlue, len(allNamespaces), colorReset)
+		fmt.Fprintf(w, "    %s%s%s\n\n", colorBold, strings.Join(allNamespaces, ", "), colorReset)
+	}
 
 	totalCritical := len(findings.Critical) + len(findings.High)
 	totalInteresting := len(findings.Interesting)
