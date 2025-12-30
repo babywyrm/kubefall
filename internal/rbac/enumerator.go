@@ -74,7 +74,9 @@ type Results struct {
 	Namespace   string
 	Claims      map[string]interface{}
 	Permissions Permissions
-	Context     interface{} `json:"context,omitempty"` // Context from context package
+	Context     interface{} `json:"context,omitempty"`
+	Services    interface{} `json:"services,omitempty"`
+	Extracted   interface{} `json:"extracted,omitempty"`
 }
 
 type Permissions struct {
@@ -143,6 +145,14 @@ func NewEnumerator(verbose bool) (*Enumerator, error) {
 		claims:    claims,
 		verbose:   verbose,
 	}, nil
+}
+
+func (e *Enumerator) GetClient() *http.Client {
+	return e.client
+}
+
+func (e *Enumerator) GetToken() string {
+	return e.token
 }
 
 func (e *Enumerator) Enumerate(dump bool) (*Results, error) {

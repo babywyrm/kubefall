@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/babywyrm/kubefall/internal/analysis"
 	"github.com/babywyrm/kubefall/internal/context"
+	"github.com/babywyrm/kubefall/internal/discovery"
 	"github.com/babywyrm/kubefall/internal/output"
 	"github.com/babywyrm/kubefall/internal/rbac"
 )
@@ -74,6 +76,30 @@ Examples:
 		}
 	}
 	results.Context = ctx
+
+	// Discover services if we can list them
+	namespaces := []string{results.Namespace}
+	for ns := range results.Permissions.Namespaces {
+		namespaces = append(namespaces, ns)
+	}
+	services := discovery.DiscoverServices(enumerator.GetClient(), enumerator.GetToken(), namespaces)
+	results.Services = services
+
+	// Extract useful data from dumps
+	if *dump {
+		extracted := make(map[string]interface{})
+		for ns, perms := range results.Permissions.Namespaces {
+			if cmData, ok := perms.Dumps["configmaps"]; ok && cmData != "" {
+				extracted[ns+"/configmaps"] = analysis.ExtractFromConfigMap(cmData)
+			}
+			if secretData, ok := perms.Dumps["secrets"]; ok && secretData != "" {
+				extracted[ns+"/secrets"] = analysis.ExtractFromSecret(secretData)
+			}
+		}
+		if len(extracted) > 0 {
+			results.Extracted = extracted
+		}
+	}
 
 	// Output results
 	outputMode := output.ParseMode(*mode)

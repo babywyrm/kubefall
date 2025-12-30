@@ -7,7 +7,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/babywyrm/kubefall/internal/analysis"
 	"github.com/babywyrm/kubefall/internal/context"
+	"github.com/babywyrm/kubefall/internal/discovery"
 	"github.com/babywyrm/kubefall/internal/rbac"
 )
 
@@ -81,6 +83,8 @@ func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
 
 	f.printHeader(w, results)
 	f.printCriticalFindings(w, findings)
+	f.printExtractedData(w, results)
+	f.printServices(w, results)
 	f.printDetailedResults(w, results, findings)
 	f.printSummary(w, findings)
 }
@@ -225,6 +229,105 @@ func (f *Formatter) printDetailedResults(w io.Writer, results *rbac.Results, fin
 
 			fmt.Fprintf(w, "  %s%-25s%s %s%s%s\n", 
 				colorBold, res, colorReset, color, strings.Join(verbs, ","), colorReset)
+		}
+		fmt.Fprintf(w, "\n")
+	}
+}
+
+func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
+	if results.Extracted == nil {
+		return
+	}
+
+	extracted, ok := results.Extracted.(map[string]interface{})
+	if !ok || len(extracted) == 0 {
+		return
+	}
+
+	fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorYellow, colorReset)
+	fmt.Fprintf(w, "%s║%s  %s📦 EXTRACTED DATA FROM RESOURCES%s                          %s║%s\n", colorYellow, colorReset, colorBold, colorReset, colorYellow, colorReset)
+	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorYellow, colorReset)
+
+	for key, data := range extracted {
+		if ext, ok := data.(*analysis.ExtractedData); ok {
+			fmt.Fprintf(w, "%s[%s]%s\n", colorYellow, key, colorReset)
+			
+			if len(ext.Tokens) > 0 {
+				fmt.Fprintf(w, "  %sTokens Found:%s\n", colorBold, colorReset)
+				for _, token := range ext.Tokens {
+					fmt.Fprintf(w, "    • Type: %s%s%s", colorBold, token.Type, colorReset)
+					if token.Valid {
+						fmt.Fprintf(w, " %s(Valid JWT)%s", colorGreen, colorReset)
+						if sub, ok := token.Claims["sub"].(string); ok {
+							fmt.Fprintf(w, " - %s", sub)
+						}
+					}
+					fmt.Fprintf(w, "\n")
+				}
+			}
+
+			if len(ext.Credentials) > 0 {
+				fmt.Fprintf(w, "  %sCredentials Found:%s\n", colorBold, colorReset)
+				for _, cred := range ext.Credentials {
+					fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
+						colorBold, cred.Type, colorReset, 
+						colorYellow, cred.Key, colorReset)
+				}
+			}
+
+			if len(ext.Endpoints) > 0 {
+				fmt.Fprintf(w, "  %sEndpoints Found:%s\n", colorBold, colorReset)
+				for _, endpoint := range ext.Endpoints {
+					fmt.Fprintf(w, "    • %s%s%s\n", colorBlue, endpoint, colorReset)
+				}
+			}
+
+			if len(ext.Base64Data) > 0 {
+				fmt.Fprintf(w, "  %sBase64 Data Found:%s\n", colorBold, colorReset)
+				for _, b64 := range ext.Base64Data {
+					fmt.Fprintf(w, "    • %s: %s...%s\n", 
+						b64.Key, b64.Decoded[:min(50, len(b64.Decoded))], colorReset)
+				}
+			}
+
+			fmt.Fprintf(w, "\n")
+		}
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func (f *Formatter) printServices(w io.Writer, results *rbac.Results) {
+	if results.Services == nil {
+		return
+	}
+
+	services, ok := results.Services.(map[string][]discovery.ServiceInfo)
+	if !ok || len(services) == 0 {
+		return
+	}
+
+	fmt.Fprintf(w, "%s═══════════════════════════════════════════════════════════%s\n", colorBlue, colorReset)
+	fmt.Fprintf(w, "%sNETWORK DISCOVERY%s\n", colorBold, colorReset)
+	fmt.Fprintf(w, "%s═══════════════════════════════════════════════════════════%s\n\n", colorBlue, colorReset)
+
+	for ns, svcs := range services {
+		fmt.Fprintf(w, "  %sNamespace: %s%s\n", colorBold, ns, colorReset)
+		for _, svc := range svcs {
+			ports := []string{}
+			for _, p := range svc.Ports {
+				ports = append(ports, fmt.Sprintf("%d/%s", p.Port, p.Protocol))
+			}
+			fmt.Fprintf(w, "    • %s%s%s (%s) - %s\n", 
+				colorBold, svc.Name, colorReset, svc.Type, strings.Join(ports, ", "))
+			if svc.Type == "NodePort" || svc.Type == "LoadBalancer" {
+				fmt.Fprintf(w, "      %s⚠️  Exposed externally!%s\n", colorYellow, colorReset)
+			}
 		}
 		fmt.Fprintf(w, "\n")
 	}
