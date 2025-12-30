@@ -26,10 +26,38 @@
 - Generate attack paths
 - Confidence scoring
 
-## Phase 3 📋 Planned
+## Phase 3 📋 Planned - Additional Auth Methods
 
+**Out-of-Cluster Enumeration**
+- kubeconfig parsing and support
+- Multiple context testing
+- Cloud provider auth (gcloud, aws-iam-authenticator, azure)
+
+**Node-Level Access**
+- k3s token discovery (`/etc/rancher/k3s/k3s.yaml`, node-token, server-token)
+- Generic k8s kubeconfig discovery on nodes
+- Stolen ServiceAccount token extraction from volumes
+
+**Cloud Metadata Abuse**
+- EKS IMDS access and IRSA
+- GKE Workload Identity
+- AKS Pod Identity
+
+**Token Theft & Reuse**
+- Environment variable scanning
+- Log file parsing
+- Mounted volume token discovery
+- CI/CD artifact analysis
+
+## Phase 4 📋 Future
+
+- Impersonation abuse detection
+- Certificate-based authentication
+- Bootstrap token validation
+- Anonymous access testing
 - Network & service discovery
 - Pod & workload abuse paths
-- Node & runtime enumeration (k3s-specific)
 - MITRE ATT&CK mapping
 - Falco rule generation
+
+See `docs/ATTACK_SCENARIOS.md` for detailed attack scenario breakdown.

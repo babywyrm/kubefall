@@ -4,10 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/babywyrm/kubefall/internal/context"
 	"github.com/babywyrm/kubefall/internal/rbac"
+)
+
+const (
+	colorReset  = "\033[0m"
+	colorRed    = "\033[91m"
+	colorGreen  = "\033[92m"
+	colorYellow = "\033[93m"
+	colorBlue   = "\033[94m"
+	colorBold   = "\033[1m"
 )
 
 type Mode int
@@ -50,263 +60,425 @@ func (f *Formatter) OutputJSON(results *rbac.Results, w io.Writer) {
 	fmt.Fprintln(w, string(data))
 }
 
+type Finding struct {
+	Severity   string
+	Resource   string
+	Namespace  string
+	Verbs      []string
+	Message    string
+	Explanation string
+}
+
+type Findings struct {
+	Critical   []Finding
+	High       []Finding
+	Interesting []Finding
+	Normal     []Finding
+}
+
 func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
-	// Context information
+	findings := f.collectFindings(results)
+
+	f.printHeader(w, results)
+	f.printCriticalFindings(w, findings)
+	f.printDetailedResults(w, results, findings)
+	f.printSummary(w, findings)
+}
+
+func (f *Formatter) printHeader(w io.Writer, results *rbac.Results) {
+	fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorBold, colorReset)
+	fmt.Fprintf(w, "%s║%s  %sKUBEFALL - Kubernetes RBAC Enumeration%s                    %s║%s\n", colorBold, colorReset, colorBold, colorReset, colorBold, colorReset)
+	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorBold, colorReset)
+
 	if results.Context != nil {
-		fmt.Fprintf(w, "=== ENVIRONMENT ===\n")
 		if ctx, ok := results.Context.(*context.Context); ok {
-			fmt.Fprintf(w, "Type: %s\n", ctx.Type)
-			if ctx.Distribution != "" {
-				fmt.Fprintf(w, "Distribution: %s\n", ctx.Distribution)
-			}
+			fmt.Fprintf(w, "%s[ENV]%s Type: %s%s%s", colorBlue, colorReset, colorBold, ctx.Type, colorReset)
 			if ctx.Cloud != "" {
-				fmt.Fprintf(w, "Cloud: %s\n", ctx.Cloud)
+				fmt.Fprintf(w, " | Cloud: %s%s%s", colorBold, ctx.Cloud, colorReset)
 			}
-			if len(ctx.Metadata) > 0 {
-				fmt.Fprintf(w, "Metadata:\n")
-				for k, v := range ctx.Metadata {
-					fmt.Fprintf(w, "  %s: %s\n", k, v)
-				}
-			}
+			fmt.Fprintf(w, "\n")
 		}
 	}
 
-	// ServiceAccount info
-	fmt.Fprintf(w, "\n=== SERVICE ACCOUNT ===\n")
-	fmt.Fprintf(w, "Current namespace: %s\n", results.Namespace)
 	if results.Claims != nil {
-		fmt.Fprintf(w, "Token Claims:\n")
-		for k, v := range results.Claims {
-			fmt.Fprintf(w, "  %s: %v\n", k, v)
+		if sub, ok := results.Claims["sub"].(string); ok {
+			fmt.Fprintf(w, "%s[SA]%s  %s\n", colorBlue, colorReset, sub)
 		}
-	}
-
-	// Namespace resources
-	fmt.Fprintf(w, "\n=== NAMESPACE RESOURCES ===\n")
-	hasAnyPermissions := false
-	for ns, perms := range results.Permissions.Namespaces {
-		// Count permissions in this namespace
-		nsHasPerms := false
-		for _, verbs := range perms.Resources {
-			if len(verbs) > 0 {
-				nsHasPerms = true
-				hasAnyPermissions = true
-				break
-			}
-		}
-
-		// Only show namespace if it has permissions
-		if nsHasPerms {
-			fmt.Fprintf(w, "\n-- Namespace: %s --\n", ns)
-			for resource, verbs := range perms.Resources {
-				if len(verbs) > 0 {
-					flag := f.analyzeResource(resource, verbs, f.explain)
-					fmt.Fprintf(w, "%-20s -> \033[92m%s\033[0m%s\n", resource, strings.Join(verbs, ","), flag)
-
-					// Show dumps if available
-					if dump, ok := perms.Dumps[resource]; ok && dump != "" {
-						fmt.Fprintf(w, "  [DUMP] %s\n", resource)
-						if f.mode == ModeRed {
-							// Show truncated dump in red mode
-							lines := strings.Split(dump, "\n")
-							if len(lines) > 10 {
-								fmt.Fprintf(w, "  %s\n  ... (truncated, %d lines total)\n", strings.Join(lines[:10], "\n  "), len(lines))
-							} else {
-								fmt.Fprintf(w, "  %s\n", dump)
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if !hasAnyPermissions {
-		fmt.Fprintf(w, "\n\033[91mNo namespace permissions found\033[0m\n")
-	}
-
-	// Cluster resources
-	fmt.Fprintf(w, "\n=== CLUSTER RESOURCES ===\n")
-	hasClusterPerms := false
-	for resource, verbs := range results.Permissions.Cluster.Resources {
-		if len(verbs) > 0 {
-			hasClusterPerms = true
-			flag := f.analyzeResource(resource, verbs, f.explain)
-			fmt.Fprintf(w, "%-20s -> \033[92m%s\033[0m%s\n", resource, strings.Join(verbs, ","), flag)
-		}
-	}
-	if !hasClusterPerms {
-		fmt.Fprintf(w, "\033[91mNo cluster-wide permissions found\033[0m\n")
-	}
-
-	// Summary
-	fmt.Fprintf(w, "\n=== SUMMARY ===\n")
-	escalationCount := 0
-	criticalResources := []string{}
-
-	// Count escalations in namespaces
-	for _, perms := range results.Permissions.Namespaces {
-		for resource, verbs := range perms.Resources {
-			if len(verbs) > 0 {
-				flag := f.analyzeResource(resource, verbs, false)
-				if strings.Contains(flag, "ESCALATION") {
-					escalationCount++
-					if !contains(criticalResources, resource) {
-						criticalResources = append(criticalResources, resource)
-					}
-				}
-			}
-		}
-	}
-
-	// Count escalations in cluster
-	for resource, verbs := range results.Permissions.Cluster.Resources {
-		if len(verbs) > 0 {
-			flag := f.analyzeResource(resource, verbs, false)
-			if strings.Contains(flag, "ESCALATION") {
-				escalationCount++
-				if !contains(criticalResources, resource) {
-					criticalResources = append(criticalResources, resource)
-				}
-			}
-		}
-	}
-
-	if escalationCount > 0 {
-		fmt.Fprintf(w, "\033[91m⚠️  Found %d potential escalation path(s)\033[0m\n", escalationCount)
-		fmt.Fprintf(w, "Critical resources: %s\n", strings.Join(criticalResources, ", "))
-	} else {
-		fmt.Fprintf(w, "\033[92m✓ No obvious escalation paths detected\033[0m\n")
+		fmt.Fprintf(w, "%s[NS]%s  %s\n\n", colorBlue, colorReset, results.Namespace)
 	}
 }
 
-func (f *Formatter) analyzeResource(resource string, verbs []string, explain bool) string {
-	var flags []string
+func (f *Formatter) printCriticalFindings(w io.Writer, findings Findings) {
+	totalCritical := len(findings.Critical) + len(findings.High)
+	if totalCritical == 0 {
+		return
+	}
 
-	// Secret access
-	if resource == "secrets" && contains(verbs, "get") {
-		flags = append(flags, " <<!! ESCALATION: can read secrets !!>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] Reading secrets can expose credentials, tokens, and keys for lateral movement")
+	fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorRed, colorReset)
+	fmt.Fprintf(w, "%s║%s  %s🚨 ESCALATION PATHS DETECTED 🚨%s                              %s║%s\n", colorRed, colorReset, colorBold, colorReset, colorRed, colorReset)
+	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorRed, colorReset)
+
+	for _, finding := range findings.Critical {
+		fmt.Fprintf(w, "%s[CRITICAL]%s %s%s%s in %s%s%s\n", 
+			colorRed, colorReset, colorBold, finding.Resource, colorReset, 
+			colorYellow, finding.Namespace, colorReset)
+		fmt.Fprintf(w, "         Verbs: %s%s%s\n", colorBold, strings.Join(finding.Verbs, ", "), colorReset)
+		fmt.Fprintf(w, "         %s%s%s\n", colorRed, finding.Message, colorReset)
+		if f.explain && finding.Explanation != "" {
+			fmt.Fprintf(w, "         %s→ %s%s\n", colorYellow, finding.Explanation, colorReset)
+		}
+		fmt.Fprintf(w, "\n")
+	}
+
+	for _, finding := range findings.High {
+		fmt.Fprintf(w, "%s[HIGH]%s     %s%s%s in %s%s%s\n", 
+			colorYellow, colorReset, colorBold, finding.Resource, colorReset, 
+			colorYellow, finding.Namespace, colorReset)
+		fmt.Fprintf(w, "         Verbs: %s%s%s\n", colorBold, strings.Join(finding.Verbs, ", "), colorReset)
+		fmt.Fprintf(w, "         %s%s%s\n", colorYellow, finding.Message, colorReset)
+		if f.explain && finding.Explanation != "" {
+			fmt.Fprintf(w, "         %s→ %s%s\n", colorYellow, finding.Explanation, colorReset)
+		}
+		fmt.Fprintf(w, "\n")
+	}
+}
+
+func (f *Formatter) printDetailedResults(w io.Writer, results *rbac.Results, findings Findings) {
+	if len(findings.Interesting) > 0 {
+		fmt.Fprintf(w, "%s═══════════════════════════════════════════════════════════%s\n", colorYellow, colorReset)
+		fmt.Fprintf(w, "%sINTERESTING FINDINGS%s\n", colorBold, colorReset)
+		fmt.Fprintf(w, "%s═══════════════════════════════════════════════════════════%s\n\n", colorYellow, colorReset)
+
+		for _, finding := range findings.Interesting {
+			fmt.Fprintf(w, "%s[!]%s %s%s%s (%s) - %s\n", 
+				colorYellow, colorReset, colorBold, finding.Resource, colorReset,
+				finding.Namespace, finding.Message)
+		}
+		fmt.Fprintf(w, "\n")
+	}
+
+	fmt.Fprintf(w, "%s═══════════════════════════════════════════════════════════%s\n", colorBlue, colorReset)
+	fmt.Fprintf(w, "%sNAMESPACE PERMISSIONS%s\n", colorBold, colorReset)
+	fmt.Fprintf(w, "%s═══════════════════════════════════════════════════════════%s\n\n", colorBlue, colorReset)
+
+	namespaces := f.getSortedNamespaces(results.Permissions.Namespaces, findings)
+	for _, ns := range namespaces {
+		perms := results.Permissions.Namespaces[ns]
+		resources := f.getSortedResources(perms.Resources, findings, ns)
+
+		if len(resources) == 0 {
+			continue
+		}
+
+		fmt.Fprintf(w, "%s┌─ Namespace: %s%s%s ───────────────────────────────────────────┐%s\n", 
+			colorBold, colorBlue, ns, colorReset, colorReset)
+		
+		for _, res := range resources {
+			verbs := perms.Resources[res]
+			severity := f.getSeverity(res, verbs, ns, findings)
+			verbStr := strings.Join(verbs, ",")
+			
+			var color string
+			switch severity {
+			case "critical":
+				color = colorRed
+			case "high":
+				color = colorYellow
+			case "interesting":
+				color = colorYellow
+			default:
+				color = colorGreen
+			}
+
+			fmt.Fprintf(w, "│ %s%-20s%s %s%-30s%s │\n", 
+				colorBold, res, colorReset, color, verbStr, colorReset)
+
+			if dump, ok := perms.Dumps[res]; ok && dump != "" {
+				fmt.Fprintf(w, "│ %s[DUMP AVAILABLE]%s %s%s%s                              │\n", 
+					colorYellow, colorReset, colorBold, res, colorReset)
+			}
+		}
+		fmt.Fprintf(w, "%s└────────────────────────────────────────────────────────────────┘%s\n\n", colorBold, colorReset)
+	}
+
+	if len(results.Permissions.Cluster.Resources) > 0 {
+		fmt.Fprintf(w, "%s═══════════════════════════════════════════════════════════%s\n", colorBlue, colorReset)
+		fmt.Fprintf(w, "%sCLUSTER PERMISSIONS%s\n", colorBold, colorReset)
+		fmt.Fprintf(w, "%s═══════════════════════════════════════════════════════════%s\n\n", colorBlue, colorReset)
+
+		resources := f.getSortedClusterResources(results.Permissions.Cluster.Resources, findings)
+		for _, res := range resources {
+			verbs := results.Permissions.Cluster.Resources[res]
+			severity := f.getSeverity(res, verbs, "", findings)
+			
+			var color string
+			switch severity {
+			case "critical":
+				color = colorRed
+			case "high":
+				color = colorYellow
+			case "interesting":
+				color = colorYellow
+			default:
+				color = colorGreen
+			}
+
+			fmt.Fprintf(w, "  %s%-25s%s %s%s%s\n", 
+				colorBold, res, colorReset, color, strings.Join(verbs, ","), colorReset)
+		}
+		fmt.Fprintf(w, "\n")
+	}
+}
+
+func (f *Formatter) printSummary(w io.Writer, findings Findings) {
+	fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorBold, colorReset)
+	fmt.Fprintf(w, "%s║%s  %sSUMMARY%s                                                      %s║%s\n", colorBold, colorReset, colorBold, colorReset, colorBold, colorReset)
+	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorBold, colorReset)
+
+	totalCritical := len(findings.Critical) + len(findings.High)
+	totalInteresting := len(findings.Interesting)
+	totalNormal := len(findings.Normal)
+
+	if totalCritical > 0 {
+		fmt.Fprintf(w, "%s[%d] CRITICAL/HIGH%s - Immediate escalation paths available\n", 
+			colorRed, totalCritical, colorReset)
+		for _, finding := range findings.Critical {
+			fmt.Fprintf(w, "    • %s%s%s in %s\n", colorBold, finding.Resource, colorReset, finding.Namespace)
+		}
+		for _, finding := range findings.High {
+			fmt.Fprintf(w, "    • %s%s%s in %s\n", colorBold, finding.Resource, colorReset, finding.Namespace)
+		}
+		fmt.Fprintf(w, "\n")
+	}
+
+	if totalInteresting > 0 {
+		fmt.Fprintf(w, "%s[%d] INTERESTING%s - Potential data exfiltration or lateral movement\n", 
+			colorYellow, totalInteresting, colorReset)
+		for _, finding := range findings.Interesting {
+			fmt.Fprintf(w, "    • %s%s%s in %s\n", colorBold, finding.Resource, colorReset, finding.Namespace)
+		}
+		fmt.Fprintf(w, "\n")
+	}
+
+	if totalNormal > 0 {
+		fmt.Fprintf(w, "%s[%d] NORMAL%s - Standard permissions\n\n", 
+			colorGreen, totalNormal, colorReset)
+	}
+
+	if totalCritical == 0 && totalInteresting == 0 {
+		fmt.Fprintf(w, "%s✓ No obvious escalation paths detected%s\n", colorGreen, colorReset)
+		fmt.Fprintf(w, "%s  Consider using --dump to inspect readable resources%s\n\n", colorYellow, colorReset)
+	} else {
+		fmt.Fprintf(w, "%s💡 TIP:%s Use --dump to extract secrets/configmaps/serviceaccounts\n", colorYellow, colorReset)
+		fmt.Fprintf(w, "%s💡 TIP:%s Use --explain for detailed explanations of findings\n\n", colorYellow, colorReset)
+	}
+}
+
+func (f *Formatter) collectFindings(results *rbac.Results) Findings {
+	findings := Findings{
+		Critical:   []Finding{},
+		High:       []Finding{},
+		Interesting: []Finding{},
+		Normal:     []Finding{},
+	}
+
+	for ns, perms := range results.Permissions.Namespaces {
+		for resource, verbs := range perms.Resources {
+			if len(verbs) == 0 {
+				continue
+			}
+
+			severity, message, explanation := f.analyzeResource(resource, verbs)
+			finding := Finding{
+				Resource:    resource,
+				Namespace:   ns,
+				Verbs:       verbs,
+				Message:     message,
+				Explanation: explanation,
+			}
+
+			switch severity {
+			case "critical":
+				finding.Severity = "critical"
+				findings.Critical = append(findings.Critical, finding)
+			case "high":
+				finding.Severity = "high"
+				findings.High = append(findings.High, finding)
+			case "interesting":
+				finding.Severity = "interesting"
+				findings.Interesting = append(findings.Interesting, finding)
+			default:
+				finding.Severity = "normal"
+				findings.Normal = append(findings.Normal, finding)
+			}
 		}
 	}
 
-	// ConfigMap access (can contain secrets, env vars, configs)
-	if resource == "configmaps" && (contains(verbs, "get") || contains(verbs, "list")) {
-		flags = append(flags, " <<! INTERESTING: can read configmaps !>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] ConfigMaps may contain secrets, environment variables, or configuration data. Use --dump to inspect contents.")
+	for resource, verbs := range results.Permissions.Cluster.Resources {
+		if len(verbs) == 0 {
+			continue
+		}
+
+		severity, message, explanation := f.analyzeResource(resource, verbs)
+		finding := Finding{
+			Resource:    resource,
+			Namespace:  "cluster",
+			Verbs:       verbs,
+			Message:     message,
+			Explanation: explanation,
+		}
+
+		switch severity {
+		case "critical":
+			findings.Critical = append(findings.Critical, finding)
+		case "high":
+			findings.High = append(findings.High, finding)
+		case "interesting":
+			findings.Interesting = append(findings.Interesting, finding)
+		default:
+			findings.Normal = append(findings.Normal, finding)
 		}
 	}
 
-	// Pod creation
-	if resource == "pods" && contains(verbs, "create") {
-		flags = append(flags, " <<!! ESCALATION: can create pods !!>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] Pod creation with hostPath/privileged can lead to node compromise")
-		}
-	}
+	return findings
+}
 
-	// Cluster RBAC
-	if (resource == "clusterroles" || resource == "clusterrolebindings") && contains(verbs, "create") {
-		flags = append(flags, " <<!! ESCALATION: cluster-wide RBAC !!>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] Creating cluster roles/bindings can grant cluster-admin privileges")
-		}
-	}
-
-	// Role binding
-	if resource == "rolebindings" && contains(verbs, "create") {
-		flags = append(flags, " <<!! ESCALATION: can create rolebindings !!>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] Creating role bindings can escalate privileges within namespace")
-		}
-	}
-
-	// ServiceAccount access
-	if resource == "serviceaccounts" && (contains(verbs, "get") || contains(verbs, "list")) {
-		flags = append(flags, " <<! INTERESTING: can read serviceaccounts !>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] ServiceAccounts may have tokens or be used for impersonation")
-		}
-	}
-	if resource == "serviceaccounts" && contains(verbs, "create") {
-		flags = append(flags, " <<!! ESCALATION: can create serviceaccounts !!>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] Creating ServiceAccounts can lead to token extraction and privilege escalation")
-		}
-	}
-
-	// Webhook configurations (cluster-wide privilege escalation)
-	if (resource == "mutatingwebhookconfigurations" || resource == "validatingwebhookconfigurations") && contains(verbs, "create") {
-		flags = append(flags, " <<!! CRITICAL: can create webhook configs !!>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] Webhook configurations can intercept and modify API requests, leading to cluster compromise")
-		}
-	}
-
-	// CRD creation (can create new resource types)
-	if resource == "customresourcedefinitions" && contains(verbs, "create") {
-		flags = append(flags, " <<!! ESCALATION: can create CRDs !!>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] Creating CRDs can enable new attack surfaces and resource types")
-		}
-	}
-
-	// Ingress creation (can expose services)
-	if resource == "ingresses" && contains(verbs, "create") {
-		flags = append(flags, " <<! INTERESTING: can create ingresses !>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] Ingress creation can expose internal services externally")
-		}
-	}
-
-	// NetworkPolicy (can affect network access)
-	if resource == "networkpolicies" && contains(verbs, "create") {
-		flags = append(flags, " <<! INTERESTING: can create networkpolicies !>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] NetworkPolicy creation can affect pod-to-pod communication")
-		}
-	}
-
-	// PodTemplate (can contain secrets/env vars)
-	if resource == "podtemplates" && (contains(verbs, "get") || contains(verbs, "list")) {
-		flags = append(flags, " <<! INTERESTING: can read podtemplates !>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] PodTemplates may contain secrets, environment variables, or configuration")
-		}
-	}
-
-	// PriorityClass (can affect scheduling)
-	if resource == "priorityclasses" && contains(verbs, "create") {
-		flags = append(flags, " <<! INTERESTING: can create priorityclasses !>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] PriorityClass creation can affect pod scheduling and preemption")
-		}
-	}
-
-	// RuntimeClass (can affect security contexts)
-	if resource == "runtimeclasses" && contains(verbs, "create") {
-		flags = append(flags, " <<! INTERESTING: can create runtimeclasses !>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] RuntimeClass creation can affect container runtime and security contexts")
-		}
-	}
-
-	// PodDisruptionBudget (can affect availability)
-	if resource == "poddisruptionbudgets" && contains(verbs, "create") {
-		flags = append(flags, " <<! INTERESTING: can create poddisruptionbudgets !>>")
-		if explain {
-			flags = append(flags, "\n    [EXPLAIN] PodDisruptionBudget creation can affect pod availability during disruptions")
-		}
-	}
-
-	// Wildcard detection
+func (f *Formatter) analyzeResource(resource string, verbs []string) (severity, message, explanation string) {
 	if contains(verbs, "*") {
-		flags = append(flags, " <<!! WILDCARD VERBS !!>>")
+		return "critical", "WILDCARD VERBS - Full access to all operations", "Wildcard verbs grant unrestricted access"
 	}
 
-	return strings.Join(flags, "")
+	if resource == "secrets" && contains(verbs, "get") {
+		return "critical", "Can read secrets - credential exposure risk", "Reading secrets can expose passwords, tokens, and keys for lateral movement"
+	}
+
+	if resource == "pods" && contains(verbs, "create") {
+		return "critical", "Can create pods - potential node escape", "Pod creation with hostPath/privileged can lead to node compromise"
+	}
+
+	if (resource == "clusterroles" || resource == "clusterrolebindings") && contains(verbs, "create") {
+		return "critical", "Can create cluster RBAC - cluster-admin path", "Creating cluster roles/bindings can grant cluster-admin privileges"
+	}
+
+	if (resource == "mutatingwebhookconfigurations" || resource == "validatingwebhookconfigurations") && contains(verbs, "create") {
+		return "critical", "Can create webhook configs - cluster compromise", "Webhook configurations can intercept and modify API requests"
+	}
+
+	if resource == "serviceaccounts" && contains(verbs, "create") {
+		return "high", "Can create serviceaccounts - token extraction", "Creating ServiceAccounts can lead to token extraction and privilege escalation"
+	}
+
+	if resource == "rolebindings" && contains(verbs, "create") {
+		return "high", "Can create rolebindings - namespace escalation", "Creating role bindings can escalate privileges within namespace"
+	}
+
+	if resource == "customresourcedefinitions" && contains(verbs, "create") {
+		return "high", "Can create CRDs - new attack surfaces", "Creating CRDs can enable new attack surfaces and resource types"
+	}
+
+	if resource == "configmaps" && (contains(verbs, "get") || contains(verbs, "list")) {
+		return "interesting", "Can read configmaps - may contain secrets", "ConfigMaps may contain secrets, environment variables, or configuration data"
+	}
+
+	if resource == "serviceaccounts" && (contains(verbs, "get") || contains(verbs, "list")) {
+		return "interesting", "Can read serviceaccounts - token discovery", "ServiceAccounts may have tokens or be used for impersonation"
+	}
+
+	if resource == "podtemplates" && (contains(verbs, "get") || contains(verbs, "list")) {
+		return "interesting", "Can read podtemplates - may contain secrets", "PodTemplates may contain secrets, environment variables, or configuration"
+	}
+
+	if resource == "ingresses" && contains(verbs, "create") {
+		return "interesting", "Can create ingresses - service exposure", "Ingress creation can expose internal services externally"
+	}
+
+	return "normal", "", ""
+}
+
+func (f *Formatter) getSeverity(resource string, verbs []string, namespace string, findings Findings) string {
+	if namespace == "" {
+		for _, finding := range findings.Critical {
+			if finding.Resource == resource && finding.Namespace == "cluster" {
+				return "critical"
+			}
+		}
+		for _, finding := range findings.High {
+			if finding.Resource == resource && finding.Namespace == "cluster" {
+				return "high"
+			}
+		}
+		for _, finding := range findings.Interesting {
+			if finding.Resource == resource && finding.Namespace == "cluster" {
+				return "interesting"
+			}
+		}
+	} else {
+		for _, finding := range findings.Critical {
+			if finding.Resource == resource && finding.Namespace == namespace {
+				return "critical"
+			}
+		}
+		for _, finding := range findings.High {
+			if finding.Resource == resource && finding.Namespace == namespace {
+				return "high"
+			}
+		}
+		for _, finding := range findings.Interesting {
+			if finding.Resource == resource && finding.Namespace == namespace {
+				return "interesting"
+			}
+		}
+	}
+	return "normal"
+}
+
+func (f *Formatter) getSortedNamespaces(nsPerms map[string]rbac.NamespacePermissions, findings Findings) []string {
+	namespaces := []string{}
+	for ns := range nsPerms {
+		namespaces = append(namespaces, ns)
+	}
+	sort.Strings(namespaces)
+	return namespaces
+}
+
+func (f *Formatter) getSortedResources(resources map[string][]string, findings Findings, namespace string) []string {
+	type resWithSeverity struct {
+		name     string
+		severity int
+	}
+
+	resList := []resWithSeverity{}
+	for res := range resources {
+		severity := 0
+		switch f.getSeverity(res, resources[res], namespace, findings) {
+		case "critical":
+			severity = 0
+		case "high":
+			severity = 1
+		case "interesting":
+			severity = 2
+		default:
+			severity = 3
+		}
+		resList = append(resList, resWithSeverity{res, severity})
+	}
+
+	sort.Slice(resList, func(i, j int) bool {
+		if resList[i].severity != resList[j].severity {
+			return resList[i].severity < resList[j].severity
+		}
+		return resList[i].name < resList[j].name
+	})
+
+	result := []string{}
+	for _, r := range resList {
+		result = append(result, r.name)
+	}
+	return result
+}
+
+func (f *Formatter) getSortedClusterResources(resources map[string][]string, findings Findings) []string {
+	return f.getSortedResources(resources, findings, "")
 }
 
 func contains(slice []string, val string) bool {
@@ -317,4 +489,3 @@ func contains(slice []string, val string) bool {
 	}
 	return false
 }
-
