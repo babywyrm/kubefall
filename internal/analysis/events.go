@@ -32,7 +32,8 @@ type SecurityEvent struct {
 }
 
 // AnalyzeEvents parses Kubernetes events JSON and extracts security-relevant patterns
-func AnalyzeEvents(eventsData string) *EventAnalysis {
+// If sinceDuration > 0, only events from the last sinceDuration are included
+func AnalyzeEvents(eventsData string, sinceDuration time.Duration) *EventAnalysis {
 	analysis := &EventAnalysis{
 		FailedAuth:        []SecurityEvent{},
 		SecretAccess:      []SecurityEvent{},
@@ -76,6 +77,33 @@ func AnalyzeEvents(eventsData string) *EventAnalysis {
 	recentThreshold := 24 * time.Hour // Events from last 24 hours
 
 	for _, event := range eventList.Items {
+		// Skip events older than sinceDuration if specified
+		if sinceDuration > 0 {
+			var eventTime time.Time
+			hasTime := false
+			// Try LastTimestamp first, then FirstTimestamp
+			if event.LastTimestamp != "" {
+				if t, err := time.Parse(time.RFC3339, event.LastTimestamp); err == nil {
+					eventTime = t
+					hasTime = true
+				} else if t, err := time.Parse(time.RFC3339Nano, event.LastTimestamp); err == nil {
+					eventTime = t
+					hasTime = true
+				}
+			}
+			if !hasTime && event.FirstTimestamp != "" {
+				if t, err := time.Parse(time.RFC3339, event.FirstTimestamp); err == nil {
+					eventTime = t
+					hasTime = true
+				} else if t, err := time.Parse(time.RFC3339Nano, event.FirstTimestamp); err == nil {
+					eventTime = t
+					hasTime = true
+				}
+			}
+			if hasTime && now.Sub(eventTime) > sinceDuration {
+				continue // Skip events older than sinceDuration
+			}
+		}
 		securityEvent := SecurityEvent{
 			Namespace:    event.Metadata.Namespace,
 			Name:         event.Metadata.Name,
@@ -87,15 +115,27 @@ func AnalyzeEvents(eventsData string) *EventAnalysis {
 			Count:        event.Count,
 		}
 
-		// Parse timestamps
+		// Parse timestamps (handle multiple formats)
 		if event.FirstTimestamp != "" {
+			// Try RFC3339 first (standard Kubernetes format)
 			if t, err := time.Parse(time.RFC3339, event.FirstTimestamp); err == nil {
 				securityEvent.FirstSeen = t
+			} else {
+				// Try RFC3339Nano
+				if t, err := time.Parse(time.RFC3339Nano, event.FirstTimestamp); err == nil {
+					securityEvent.FirstSeen = t
+				}
 			}
 		}
 		if event.LastTimestamp != "" {
+			// Try RFC3339 first (standard Kubernetes format)
 			if t, err := time.Parse(time.RFC3339, event.LastTimestamp); err == nil {
 				securityEvent.LastSeen = t
+			} else {
+				// Try RFC3339Nano
+				if t, err := time.Parse(time.RFC3339Nano, event.LastTimestamp); err == nil {
+					securityEvent.LastSeen = t
+				}
 			}
 		}
 

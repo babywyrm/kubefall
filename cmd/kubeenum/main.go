@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/babywyrm/kubefall/internal/analysis"
 	"github.com/babywyrm/kubefall/internal/context"
@@ -27,7 +28,10 @@ func containsAny(slice []string, values []string) bool {
 
 func main() {
 	var (
-		dump        = flag.Bool("dump", false, "Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts, events)")
+		dump        = flag.Bool("dump", false, "Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)")
+		events      = flag.Bool("events", false, "Analyze Kubernetes events for security-relevant patterns")
+		eventsSince = flag.String("events-since", "", "Only analyze events since this duration (e.g., 24h, 1h, 30m)")
+		eventsLimit = flag.Int("events-limit", 20, "Maximum number of events to show per category")
 		full        = flag.Bool("full", false, "Print full contents of extracted resources (use with --dump)")
 		jsonOut     = flag.Bool("json", false, "Output results in JSON (machine-readable)")
 		format      = flag.String("format", "text", "Output format: text, json, csv, html, markdown")
@@ -48,7 +52,10 @@ Usage:
   kubeenum [options]
 
 Options:
-  --dump         Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts, events)
+  --dump         Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)
+  --events       Analyze Kubernetes events for security-relevant patterns
+  --events-since Only analyze events since this duration (e.g., 24h, 1h, 30m)
+  --events-limit Maximum number of events to show per category [default: 20]
   --full         Print full contents of extracted resources (use with --dump)
   --format       Output format: text, json, csv, html, markdown [default: text]
   --output       Write output to file (default: stdout)
@@ -64,6 +71,9 @@ Examples:
   kubeenum
   kubeenum --dump
   kubeenum --dump --full
+  kubeenum --events
+  kubeenum --events --events-since 24h
+  kubeenum --events --events-limit 50
   kubeenum --format json --output results.json
   kubeenum --severity critical,high
   kubeenum --summary-only
@@ -89,7 +99,7 @@ Examples:
 	}
 
 	// Run enumeration
-	results, err := enumerator.Enumerate(*dump)
+	results, err := enumerator.Enumerate(*dump, *events)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: Enumeration failed: %v\n", err)
 		os.Exit(1)
@@ -188,14 +198,25 @@ Examples:
 		}
 	}
 
-	// Analyze events if we can read them (when --dump is used)
-	if *dump {
+	// Analyze events if requested with --events flag
+	if *events {
+		// Parse events-since duration if provided
+		var eventsSinceDuration time.Duration
+		if *eventsSince != "" {
+			var err error
+			eventsSinceDuration, err = time.ParseDuration(*eventsSince)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Invalid --events-since duration '%s': %v\n", *eventsSince, err)
+				fmt.Fprintf(os.Stderr, "         Using default (no time filter)\n")
+			}
+		}
+
 		eventAnalysisMap := make(map[string]interface{})
 		eventsAnalyzedCount := 0
 		for ns, perms := range results.Permissions.Namespaces {
 			if eventsData, ok := perms.Dumps["events"]; ok && eventsData != "" {
 				eventsAnalyzedCount++
-				eventAnalysis := analysis.AnalyzeEvents(eventsData)
+				eventAnalysis := analysis.AnalyzeEvents(eventsData, eventsSinceDuration)
 				// Include analysis if there are security-relevant findings
 				if len(eventAnalysis.FailedAuth) > 0 ||
 					len(eventAnalysis.SecretAccess) > 0 ||
@@ -237,7 +258,7 @@ Examples:
 
 	// Output results
 	outputMode := output.ParseMode(*mode)
-	formatter := output.NewFormatter(outputMode, *explain, *full, *noColor, *summaryOnly, severityFilter)
+	formatter := output.NewFormatter(outputMode, *explain, *full, *noColor, *summaryOnly, severityFilter, *eventsLimit)
 
 	// Handle format
 	if *jsonOut || *format == "json" {

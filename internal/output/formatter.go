@@ -55,9 +55,10 @@ type Formatter struct {
 	noColor       bool
 	summaryOnly   bool
 	severityFilter []string
+	eventsLimit   int
 }
 
-func NewFormatter(mode Mode, explain bool, full bool, noColor bool, summaryOnly bool, severityFilter []string) *Formatter {
+func NewFormatter(mode Mode, explain bool, full bool, noColor bool, summaryOnly bool, severityFilter []string, eventsLimit int) *Formatter {
 	return &Formatter{
 		mode:          mode,
 		explain:       explain,
@@ -65,6 +66,7 @@ func NewFormatter(mode Mode, explain bool, full bool, noColor bool, summaryOnly 
 		noColor:       noColor,
 		summaryOnly:   summaryOnly,
 		severityFilter: severityFilter,
+		eventsLimit:   eventsLimit,
 	}
 }
 

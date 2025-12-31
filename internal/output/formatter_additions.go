@@ -242,7 +242,11 @@ func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
 						hasFindings = true
 					}
 					fmt.Fprintf(w, "  %s[%s] %s🔴 FAILED AUTHENTICATION ATTEMPTS:%s\n", colorRed, ns, colorBold, colorReset)
-					for _, event := range eventAnalysis.FailedAuth {
+					failedAuth := eventAnalysis.FailedAuth
+					if len(failedAuth) > f.eventsLimit {
+						failedAuth = failedAuth[:f.eventsLimit]
+					}
+					for _, event := range failedAuth {
 						fmt.Fprintf(w, "    • %s%s%s: %s%s%s", 
 							colorBold, event.Reason, colorReset,
 							colorYellow, event.Message, colorReset)
@@ -250,6 +254,9 @@ func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
 							fmt.Fprintf(w, " (count: %d)", event.Count)
 						}
 						fmt.Fprintf(w, "\n")
+					}
+					if len(eventAnalysis.FailedAuth) > f.eventsLimit {
+						fmt.Fprintf(w, "    ... (showing first %d of %d)\n", f.eventsLimit, len(eventAnalysis.FailedAuth))
 					}
 					fmt.Fprintf(w, "\n")
 				}
@@ -263,7 +270,11 @@ func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
 						hasFindings = true
 					}
 					fmt.Fprintf(w, "  %s[%s] %s🟠 RBAC CHANGES (Potential Privilege Escalation):%s\n", colorYellow, ns, colorBold, colorReset)
-					for _, event := range eventAnalysis.RBACChanges {
+					rbacChanges := eventAnalysis.RBACChanges
+					if len(rbacChanges) > f.eventsLimit {
+						rbacChanges = rbacChanges[:f.eventsLimit]
+					}
+					for _, event := range rbacChanges {
 						fmt.Fprintf(w, "    • %s%s%s/%s%s%s: %s%s%s", 
 							colorBold, event.InvolvedKind, colorReset,
 							colorYellow, event.InvolvedName, colorReset,
@@ -272,6 +283,9 @@ func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
 							fmt.Fprintf(w, " (count: %d)", event.Count)
 						}
 						fmt.Fprintf(w, "\n")
+					}
+					if len(eventAnalysis.RBACChanges) > f.eventsLimit {
+						fmt.Fprintf(w, "    ... (showing first %d of %d)\n", f.eventsLimit, len(eventAnalysis.RBACChanges))
 					}
 					fmt.Fprintf(w, "\n")
 				}
@@ -285,7 +299,11 @@ func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
 						hasFindings = true
 					}
 					fmt.Fprintf(w, "  %s[%s] %s🔑 SECRET ACCESS PATTERNS:%s\n", colorYellow, ns, colorBold, colorReset)
-					for _, event := range eventAnalysis.SecretAccess {
+					secretAccess := eventAnalysis.SecretAccess
+					if len(secretAccess) > f.eventsLimit {
+						secretAccess = secretAccess[:f.eventsLimit]
+					}
+					for _, event := range secretAccess {
 						fmt.Fprintf(w, "    • Secret: %s%s%s - %s%s%s", 
 							colorBold, event.InvolvedName, colorReset,
 							colorYellow, event.Reason, colorReset)
@@ -294,37 +312,44 @@ func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
 						}
 						fmt.Fprintf(w, "\n")
 					}
+					if len(eventAnalysis.SecretAccess) > f.eventsLimit {
+						fmt.Fprintf(w, "    ... (showing first %d of %d)\n", f.eventsLimit, len(eventAnalysis.SecretAccess))
+					}
 					fmt.Fprintf(w, "\n")
 				}
 
 				// Pod creations (Interesting - reconnaissance indicator)
-				if len(eventAnalysis.PodCreations) > 0 && len(eventAnalysis.FailedAuth) == 0 && len(eventAnalysis.RBACChanges) == 0 && len(eventAnalysis.SecretAccess) == 0 {
-					if !hasFindings {
-						fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorYellow, colorReset)
-						fmt.Fprintf(w, "%s║%s  %s📊 EVENT SECURITY ANALYSIS%s                              %s║%s\n", colorYellow, colorReset, colorBold, colorReset, colorYellow, colorReset)
-						fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorYellow, colorReset)
-						hasFindings = true
-					}
-					fmt.Fprintf(w, "  %s[%s] %s📦 RECENT POD ACTIVITY:%s\n", colorYellow, ns, colorBold, colorReset)
-					// Show only most recent 10 pod creations to avoid spam
-					maxPods := 10
-					podCreations := eventAnalysis.PodCreations
-					if len(podCreations) > maxPods {
-						podCreations = podCreations[:maxPods]
-					}
-					for _, event := range podCreations {
-						fmt.Fprintf(w, "    • Pod: %s%s%s - %s%s%s", 
-							colorBold, event.InvolvedName, colorReset,
-							colorYellow, event.Reason, colorReset)
-						if event.Count > 1 {
-							fmt.Fprintf(w, " (count: %d)", event.Count)
+				// Show if there are pod creations and no higher-priority findings, OR if it's the only finding
+				if len(eventAnalysis.PodCreations) > 0 {
+					// Only show pod creations if there are no critical/high findings, or show them after other findings
+					hasCriticalOrHigh := len(eventAnalysis.FailedAuth) > 0 || len(eventAnalysis.RBACChanges) > 0 || len(eventAnalysis.SecretAccess) > 0
+					if !hasCriticalOrHigh || hasFindings {
+						if !hasFindings {
+							fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorYellow, colorReset)
+							fmt.Fprintf(w, "%s║%s  %s📊 EVENT SECURITY ANALYSIS%s                              %s║%s\n", colorYellow, colorReset, colorBold, colorReset, colorYellow, colorReset)
+							fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorYellow, colorReset)
+							hasFindings = true
+						}
+						fmt.Fprintf(w, "  %s[%s] %s📦 RECENT POD ACTIVITY:%s\n", colorYellow, ns, colorBold, colorReset)
+						// Limit pod creations to eventsLimit
+						podCreations := eventAnalysis.PodCreations
+						if len(podCreations) > f.eventsLimit {
+							podCreations = podCreations[:f.eventsLimit]
+						}
+						for _, event := range podCreations {
+							fmt.Fprintf(w, "    • Pod: %s%s%s - %s%s%s", 
+								colorBold, event.InvolvedName, colorReset,
+								colorYellow, event.Reason, colorReset)
+							if event.Count > 1 {
+								fmt.Fprintf(w, " (count: %d)", event.Count)
+							}
+							fmt.Fprintf(w, "\n")
+						}
+						if len(eventAnalysis.PodCreations) > f.eventsLimit {
+							fmt.Fprintf(w, "    ... (showing first %d of %d)\n", f.eventsLimit, len(eventAnalysis.PodCreations))
 						}
 						fmt.Fprintf(w, "\n")
 					}
-					if len(eventAnalysis.PodCreations) >= maxPods {
-						fmt.Fprintf(w, "    ... (showing first %d)\n", maxPods)
-					}
-					fmt.Fprintf(w, "\n")
 				}
 
 				// Image pull failures (Interesting)
@@ -336,7 +361,11 @@ func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
 						hasFindings = true
 					}
 					fmt.Fprintf(w, "  %s[%s] %s⚠️  IMAGE PULL FAILURES:%s\n", colorYellow, ns, colorBold, colorReset)
-					for _, event := range eventAnalysis.ImagePullFailures {
+					imagePullFailures := eventAnalysis.ImagePullFailures
+					if len(imagePullFailures) > f.eventsLimit {
+						imagePullFailures = imagePullFailures[:f.eventsLimit]
+					}
+					for _, event := range imagePullFailures {
 						fmt.Fprintf(w, "    • %s%s%s: %s%s%s", 
 							colorBold, event.Reason, colorReset,
 							colorYellow, event.Message, colorReset)
@@ -344,6 +373,9 @@ func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
 							fmt.Fprintf(w, " (count: %d)", event.Count)
 						}
 						fmt.Fprintf(w, "\n")
+					}
+					if len(eventAnalysis.ImagePullFailures) > f.eventsLimit {
+						fmt.Fprintf(w, "    ... (showing first %d of %d)\n", f.eventsLimit, len(eventAnalysis.ImagePullFailures))
 					}
 					fmt.Fprintf(w, "\n")
 				}
@@ -357,7 +389,11 @@ func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
 						hasFindings = true
 					}
 					fmt.Fprintf(w, "  %s[%s] %s🌐 NETWORK POLICY VIOLATIONS:%s\n", colorYellow, ns, colorBold, colorReset)
-					for _, event := range eventAnalysis.NetworkViolations {
+					networkViolations := eventAnalysis.NetworkViolations
+					if len(networkViolations) > f.eventsLimit {
+						networkViolations = networkViolations[:f.eventsLimit]
+					}
+					for _, event := range networkViolations {
 						fmt.Fprintf(w, "    • %s%s%s: %s%s%s", 
 							colorBold, event.Reason, colorReset,
 							colorYellow, event.Message, colorReset)
@@ -365,6 +401,9 @@ func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
 							fmt.Fprintf(w, " (count: %d)", event.Count)
 						}
 						fmt.Fprintf(w, "\n")
+					}
+					if len(eventAnalysis.NetworkViolations) > f.eventsLimit {
+						fmt.Fprintf(w, "    ... (showing first %d of %d)\n", f.eventsLimit, len(eventAnalysis.NetworkViolations))
 					}
 					fmt.Fprintf(w, "\n")
 				}

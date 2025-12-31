@@ -185,7 +185,7 @@ func (e *Enumerator) DumpClusterResource(resource string) string {
 	return string(body)
 }
 
-func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
+func (e *Enumerator) Enumerate(dump bool, events bool) (*Results, error) {
 	if e.verbose {
 		fmt.Fprintf(os.Stderr, "[*] Starting enumeration...\n")
 		fmt.Fprintf(os.Stderr, "[*] Checking %d namespace resources across all namespaces\n", len(nsResources))
@@ -251,7 +251,11 @@ func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
 				nsPerms.Resources[r] = allowed
 
 				// Dump resources if requested and readable
-				if dump && contains([]string{"secrets", "configmaps", "pods", "services", "serviceaccounts", "events"}, r) {
+				dumpResources := []string{"secrets", "configmaps", "pods", "services", "serviceaccounts"}
+				if events {
+					dumpResources = append(dumpResources, "events")
+				}
+				if dump && contains(dumpResources, r) {
 					if contains(allowed, "get") || contains(allowed, "list") {
 						if e.verbose {
 							fmt.Fprintf(os.Stderr, "    [*] Dumping %s...\n", r)
