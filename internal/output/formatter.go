@@ -115,6 +115,7 @@ func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
 	f.printRBACAnalysis(w, results)
 	f.printTokenExtraction(w, results)
 	f.printPodSecurity(w, results)
+	f.printEventAnalysis(w, results)
 	f.printExtractedData(w, results)
 	f.printServices(w, results)
 	f.printDetailedResults(w, results, findings)

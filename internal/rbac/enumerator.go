@@ -81,6 +81,7 @@ type Results struct {
 	PodSecurity   interface{} `json:"podsecurity,omitempty"`
 	RBACAnalysis  interface{} `json:"rbacanalysis,omitempty"`
 	TokenExtraction interface{} `json:"tokenextraction,omitempty"`
+	EventAnalysis interface{} `json:"eventanalysis,omitempty"`
 }
 
 type Permissions struct {
@@ -250,7 +251,7 @@ func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
 				nsPerms.Resources[r] = allowed
 
 				// Dump resources if requested and readable
-				if dump && contains([]string{"secrets", "configmaps", "pods", "services", "serviceaccounts"}, r) {
+				if dump && contains([]string{"secrets", "configmaps", "pods", "services", "serviceaccounts", "events"}, r) {
 					if contains(allowed, "get") || contains(allowed, "list") {
 						if e.verbose {
 							fmt.Fprintf(os.Stderr, "    [*] Dumping %s...\n", r)

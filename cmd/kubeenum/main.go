@@ -27,7 +27,7 @@ func containsAny(slice []string, values []string) bool {
 
 func main() {
 	var (
-		dump        = flag.Bool("dump", false, "Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)")
+		dump        = flag.Bool("dump", false, "Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts, events)")
 		full        = flag.Bool("full", false, "Print full contents of extracted resources (use with --dump)")
 		jsonOut     = flag.Bool("json", false, "Output results in JSON (machine-readable)")
 		format      = flag.String("format", "text", "Output format: text, json, csv, html, markdown")
@@ -48,7 +48,7 @@ Usage:
   kubeenum [options]
 
 Options:
-  --dump         Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)
+  --dump         Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts, events)
   --full         Print full contents of extracted resources (use with --dump)
   --format       Output format: text, json, csv, html, markdown [default: text]
   --output       Write output to file (default: stdout)
@@ -185,6 +185,32 @@ Examples:
 				rbacAnalysis := analysis.AnalyzeClusterRoleBindings(bindingsData)
 				results.RBACAnalysis = rbacAnalysis
 			}
+		}
+	}
+
+	// Analyze events if we can read them (when --dump is used)
+	if *dump {
+		eventAnalysisMap := make(map[string]interface{})
+		eventsAnalyzedCount := 0
+		for ns, perms := range results.Permissions.Namespaces {
+			if eventsData, ok := perms.Dumps["events"]; ok && eventsData != "" {
+				eventsAnalyzedCount++
+				eventAnalysis := analysis.AnalyzeEvents(eventsData)
+				// Include analysis if there are security-relevant findings
+				if len(eventAnalysis.FailedAuth) > 0 ||
+					len(eventAnalysis.SecretAccess) > 0 ||
+					len(eventAnalysis.PodCreations) > 0 ||
+					len(eventAnalysis.RBACChanges) > 0 ||
+					len(eventAnalysis.ImagePullFailures) > 0 ||
+					len(eventAnalysis.NetworkViolations) > 0 ||
+					len(eventAnalysis.RecentEvents) > 0 {
+					eventAnalysisMap[ns] = eventAnalysis
+				}
+			}
+		}
+		// Set EventAnalysis if we analyzed events (empty map {} in JSON means analyzed but no findings)
+		if eventsAnalyzedCount > 0 {
+			results.EventAnalysis = eventAnalysisMap
 		}
 	}
 

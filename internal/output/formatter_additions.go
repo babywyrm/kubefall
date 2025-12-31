@@ -223,3 +223,156 @@ func (f *Formatter) printPodSecurity(w io.Writer, results *rbac.Results) {
 	}
 }
 
+func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
+	if results.EventAnalysis == nil {
+		return
+	}
+
+	if eventAnalysisMap, ok := results.EventAnalysis.(map[string]interface{}); ok {
+		hasFindings := false
+		
+		for ns, data := range eventAnalysisMap {
+			if eventAnalysis, ok := data.(*analysis.EventAnalysis); ok {
+				// Failed authentication attempts (Critical)
+				if len(eventAnalysis.FailedAuth) > 0 {
+					if !hasFindings {
+						fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorRed, colorReset)
+						fmt.Fprintf(w, "%s║%s  %s📊 EVENT SECURITY ANALYSIS%s                              %s║%s\n", colorRed, colorReset, colorBold, colorReset, colorRed, colorReset)
+						fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorRed, colorReset)
+						hasFindings = true
+					}
+					fmt.Fprintf(w, "  %s[%s] %s🔴 FAILED AUTHENTICATION ATTEMPTS:%s\n", colorRed, ns, colorBold, colorReset)
+					for _, event := range eventAnalysis.FailedAuth {
+						fmt.Fprintf(w, "    • %s%s%s: %s%s%s", 
+							colorBold, event.Reason, colorReset,
+							colorYellow, event.Message, colorReset)
+						if event.Count > 1 {
+							fmt.Fprintf(w, " (count: %d)", event.Count)
+						}
+						fmt.Fprintf(w, "\n")
+					}
+					fmt.Fprintf(w, "\n")
+				}
+
+				// RBAC changes (High)
+				if len(eventAnalysis.RBACChanges) > 0 {
+					if !hasFindings {
+						fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorRed, colorReset)
+						fmt.Fprintf(w, "%s║%s  %s📊 EVENT SECURITY ANALYSIS%s                              %s║%s\n", colorRed, colorReset, colorBold, colorReset, colorRed, colorReset)
+						fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorRed, colorReset)
+						hasFindings = true
+					}
+					fmt.Fprintf(w, "  %s[%s] %s🟠 RBAC CHANGES (Potential Privilege Escalation):%s\n", colorYellow, ns, colorBold, colorReset)
+					for _, event := range eventAnalysis.RBACChanges {
+						fmt.Fprintf(w, "    • %s%s%s/%s%s%s: %s%s%s", 
+							colorBold, event.InvolvedKind, colorReset,
+							colorYellow, event.InvolvedName, colorReset,
+							colorBold, event.Reason, colorReset)
+						if event.Count > 1 {
+							fmt.Fprintf(w, " (count: %d)", event.Count)
+						}
+						fmt.Fprintf(w, "\n")
+					}
+					fmt.Fprintf(w, "\n")
+				}
+
+				// Secret access patterns (High)
+				if len(eventAnalysis.SecretAccess) > 0 {
+					if !hasFindings {
+						fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorRed, colorReset)
+						fmt.Fprintf(w, "%s║%s  %s📊 EVENT SECURITY ANALYSIS%s                              %s║%s\n", colorRed, colorReset, colorBold, colorReset, colorRed, colorReset)
+						fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorRed, colorReset)
+						hasFindings = true
+					}
+					fmt.Fprintf(w, "  %s[%s] %s🔑 SECRET ACCESS PATTERNS:%s\n", colorYellow, ns, colorBold, colorReset)
+					for _, event := range eventAnalysis.SecretAccess {
+						fmt.Fprintf(w, "    • Secret: %s%s%s - %s%s%s", 
+							colorBold, event.InvolvedName, colorReset,
+							colorYellow, event.Reason, colorReset)
+						if event.Count > 1 {
+							fmt.Fprintf(w, " (count: %d)", event.Count)
+						}
+						fmt.Fprintf(w, "\n")
+					}
+					fmt.Fprintf(w, "\n")
+				}
+
+				// Pod creations (Interesting - reconnaissance indicator)
+				if len(eventAnalysis.PodCreations) > 0 && len(eventAnalysis.FailedAuth) == 0 && len(eventAnalysis.RBACChanges) == 0 && len(eventAnalysis.SecretAccess) == 0 {
+					if !hasFindings {
+						fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorYellow, colorReset)
+						fmt.Fprintf(w, "%s║%s  %s📊 EVENT SECURITY ANALYSIS%s                              %s║%s\n", colorYellow, colorReset, colorBold, colorReset, colorYellow, colorReset)
+						fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorYellow, colorReset)
+						hasFindings = true
+					}
+					fmt.Fprintf(w, "  %s[%s] %s📦 RECENT POD ACTIVITY:%s\n", colorYellow, ns, colorBold, colorReset)
+					// Show only most recent 10 pod creations to avoid spam
+					maxPods := 10
+					podCreations := eventAnalysis.PodCreations
+					if len(podCreations) > maxPods {
+						podCreations = podCreations[:maxPods]
+					}
+					for _, event := range podCreations {
+						fmt.Fprintf(w, "    • Pod: %s%s%s - %s%s%s", 
+							colorBold, event.InvolvedName, colorReset,
+							colorYellow, event.Reason, colorReset)
+						if event.Count > 1 {
+							fmt.Fprintf(w, " (count: %d)", event.Count)
+						}
+						fmt.Fprintf(w, "\n")
+					}
+					if len(eventAnalysis.PodCreations) >= maxPods {
+						fmt.Fprintf(w, "    ... (showing first %d)\n", maxPods)
+					}
+					fmt.Fprintf(w, "\n")
+				}
+
+				// Image pull failures (Interesting)
+				if len(eventAnalysis.ImagePullFailures) > 0 {
+					if !hasFindings {
+						fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorYellow, colorReset)
+						fmt.Fprintf(w, "%s║%s  %s📊 EVENT SECURITY ANALYSIS%s                              %s║%s\n", colorYellow, colorReset, colorBold, colorReset, colorYellow, colorReset)
+						fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorYellow, colorReset)
+						hasFindings = true
+					}
+					fmt.Fprintf(w, "  %s[%s] %s⚠️  IMAGE PULL FAILURES:%s\n", colorYellow, ns, colorBold, colorReset)
+					for _, event := range eventAnalysis.ImagePullFailures {
+						fmt.Fprintf(w, "    • %s%s%s: %s%s%s", 
+							colorBold, event.Reason, colorReset,
+							colorYellow, event.Message, colorReset)
+						if event.Count > 1 {
+							fmt.Fprintf(w, " (count: %d)", event.Count)
+						}
+						fmt.Fprintf(w, "\n")
+					}
+					fmt.Fprintf(w, "\n")
+				}
+
+				// Network violations (Interesting)
+				if len(eventAnalysis.NetworkViolations) > 0 {
+					if !hasFindings {
+						fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorYellow, colorReset)
+						fmt.Fprintf(w, "%s║%s  %s📊 EVENT SECURITY ANALYSIS%s                              %s║%s\n", colorYellow, colorReset, colorBold, colorReset, colorYellow, colorReset)
+						fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorYellow, colorReset)
+						hasFindings = true
+					}
+					fmt.Fprintf(w, "  %s[%s] %s🌐 NETWORK POLICY VIOLATIONS:%s\n", colorYellow, ns, colorBold, colorReset)
+					for _, event := range eventAnalysis.NetworkViolations {
+						fmt.Fprintf(w, "    • %s%s%s: %s%s%s", 
+							colorBold, event.Reason, colorReset,
+							colorYellow, event.Message, colorReset)
+						if event.Count > 1 {
+							fmt.Fprintf(w, " (count: %d)", event.Count)
+						}
+						fmt.Fprintf(w, "\n")
+					}
+					fmt.Fprintf(w, "\n")
+				}
+			}
+		}
+
+		if !hasFindings {
+			return
+		}
+	}
+}
