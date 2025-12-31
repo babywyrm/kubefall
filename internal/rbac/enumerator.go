@@ -251,11 +251,14 @@ func (e *Enumerator) Enumerate(dump bool, events bool) (*Results, error) {
 				nsPerms.Resources[r] = allowed
 
 				// Dump resources if requested and readable
-				dumpResources := []string{"secrets", "configmaps", "pods", "services", "serviceaccounts"}
-				if events {
-					dumpResources = append(dumpResources, "events")
+				shouldDump := false
+				if dump && contains([]string{"secrets", "configmaps", "pods", "services", "serviceaccounts"}, r) {
+					shouldDump = true
 				}
-				if dump && contains(dumpResources, r) {
+				if events && r == "events" {
+					shouldDump = true
+				}
+				if shouldDump {
 					if contains(allowed, "get") || contains(allowed, "list") {
 						if e.verbose {
 							fmt.Fprintf(os.Stderr, "    [*] Dumping %s...\n", r)
