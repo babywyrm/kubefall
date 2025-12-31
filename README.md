@@ -28,11 +28,29 @@ make build-linux
 # Basic enumeration
 ./bin/kubeenum
 
-# Dump readable resources (secrets, configmaps, pods, services)
+# Dump readable resources (secrets, configmaps, pods, services, serviceaccounts)
 ./bin/kubeenum --dump
 
+# Full dump with complete resource contents (no truncation)
+./bin/kubeenum --dump --full
+
 # JSON output for automation
-./bin/kubeenum --json
+./bin/kubeenum --format json
+
+# Export to file
+./bin/kubeenum --dump --output results.json
+
+# Filter by severity (critical, high, interesting, normal)
+./bin/kubeenum --severity critical,high
+
+# Summary only (condensed output)
+./bin/kubeenum --summary-only
+
+# Export to CSV for spreadsheet analysis
+./bin/kubeenum --dump --format csv --output findings.csv
+
+# Generate HTML report
+./bin/kubeenum --dump --format html --output report.html
 
 # Blue team mode (detection-focused)
 ./bin/kubeenum --mode blue --explain
@@ -42,6 +60,9 @@ make build-linux
 
 # Verbose mode (see what's being checked)
 ./bin/kubeenum --verbose
+
+# No color output (for scripts/logs)
+./bin/kubeenum --no-color
 ```
 
 ## 🔧 How It Works
@@ -91,6 +112,32 @@ Automatically detects:
 - 🟠 **High**: serviceaccounts (create), rolebindings (create), customresourcedefinitions (create)
 - 🟡 **Interesting**: configmaps (read), serviceaccounts (read), ingresses (create), networkpolicies (create)
 
+**Additional Analysis:**
+- Pod security context analysis (privileged, hostNetwork, hostPath mounts, capabilities)
+- Service Account token extraction and validation
+- High-privilege ServiceAccount detection
+- Cluster-admin binding discovery
+- Network service discovery and exposure analysis
+
+### Output Formats
+
+kubefall supports multiple output formats for different use cases:
+
+- **Text** (default): Human-readable, color-coded output with severity-based sections
+- **JSON**: Machine-readable for automation and integration
+- **CSV**: Spreadsheet-friendly for analysis and filtering
+- **HTML**: Visual reports with tables and styling
+- **Markdown**: Documentation-friendly format
+
+### Output Options
+
+- `--output <file>`: Write results to a file instead of stdout
+- `--format <format>`: Choose output format (text, json, csv, html, markdown)
+- `--severity <levels>`: Filter by severity (critical,high,interesting,normal, comma-separated)
+- `--summary-only`: Show only the summary section (condensed output)
+- `--no-color`: Disable ANSI color codes (for scripts and logs)
+- `--full`: Print complete resource contents without truncation (use with `--dump`)
+
 ## 📖 Example Output
 
 ```
@@ -99,19 +146,19 @@ Type: k3s
 Distribution: k3s
 Metadata:
   issuer: https://kubernetes.default.svc.cluster.local
-  serviceaccount: system:serviceaccount:internal:flask-rage-sa
+  serviceaccount: system:serviceaccount:app-namespace:web-app-sa
 
 === SERVICE ACCOUNT ===
-Current namespace: internal
+Current namespace: app-namespace
 Token Claims:
-  sub: system:serviceaccount:internal:flask-rage-sa
+  sub: system:serviceaccount:app-namespace:web-app-sa
   aud: [https://kubernetes.default.svc.cluster.local k3s]
 
 === NAMESPACE RESOURCES ===
--- Namespace: dev-internal --
+-- Namespace: dev-namespace --
 configmaps           -> get,list <<! INTERESTING: can read configmaps !>>
 
--- Namespace: internal --
+-- Namespace: app-namespace --
 configmaps           -> get,list <<! INTERESTING: can read configmaps !>>
 
 === CLUSTER RESOURCES ===
@@ -128,10 +175,10 @@ $ ./bin/kubeenum --verbose
 [*] Starting enumeration...
 [*] Checking 20 namespace resources across all namespaces
 [*] Checking 11 cluster resources
-[*] Discovered 8 namespace(s): default, dev-internal, internal, kube-public, kube-system, wordpress, gatekeeper-system, kube-node-lease
+[*] Discovered 8 namespace(s): default, dev-namespace, app-namespace, kube-public, kube-system, web-app, security-system, kube-node-lease
 
 [*] Enumerating namespace resources...
-[*] Checking namespace: dev-internal
+[*] Checking namespace: dev-namespace
   [*] Checking resource: configmaps
     [-] configmaps/get: denied
     [+] configmaps/list: ALLOWED
@@ -153,7 +200,9 @@ kubefall/
 ├── internal/
 │   ├── rbac/              # RBAC enumeration engine (SSAR-based)
 │   ├── context/           # Environment detection
-│   └── output/            # Output formatters (red/blue/audit modes)
+│   ├── output/            # Output formatters (red/blue/audit modes, export formats)
+│   ├── analysis/          # Data extraction and analysis (tokens, pods, RBAC)
+│   └── discovery/         # Service and cluster discovery
 ├── Makefile               # Build automation
 └── README.md              # This file
 ```
@@ -163,15 +212,18 @@ kubefall/
 ### Project Structure
 
 - `cmd/kubeenum/` - Main CLI application
-- `internal/rbac/` - RBAC enumeration engine
-- `internal/context/` - Environment detection
-- `internal/output/` - Output formatters
+- `internal/rbac/` - RBAC enumeration engine (SSAR-based)
+- `internal/context/` - Environment detection (k3s, EKS, GKE, AKS)
+- `internal/output/` - Output formatters (text, JSON, CSV, HTML, Markdown)
+- `internal/analysis/` - Data extraction and analysis (tokens, pods, RBAC)
+- `internal/discovery/` - Service and cluster discovery
 
 ### Adding New Checks
 
 1. Add resource to `internal/rbac/enumerator.go` (nsResources or clusterResources)
 2. Add escalation rule to `internal/output/formatter.go` (analyzeResource function)
-3. Update output formatter if needed
+3. Add extraction logic to `internal/analysis/` if resource contains extractable data
+4. Update output formatter if needed
 
 ## 🧪 Testing
 
@@ -228,17 +280,39 @@ kubectl exec -it test-pod -- /kubeenum
 - Environment detection (k3s, EKS, GKE, AKS)
 - Multi-mode output (red/blue/audit)
 - Escalation heuristics
+- Verbose mode
 
-### Phase 2 🚧 (Next)
-- Dynamic API discovery (CRDs, aggregated APIs)
+### Phase 2 ✅ (Complete)
+- Resource dumping (`--dump`)
 - ConfigMap/Secret content analysis
-- Capability mapping & attack paths
-- Token reuse detection
+- Pod security context analysis
+- RBAC analysis (cluster-admin bindings, wildcard roles)
+- Service Account token extraction
+- High-privilege ServiceAccount detection
+- Service discovery
+- Cluster version discovery
 
-### Phase 3 📋 (Planned)
-- Network & service discovery
-- Pod & workload abuse paths
-- Node & runtime enumeration (k3s-specific)
+### Phase 3 ✅ (Complete)
+- Multiple output formats (JSON, CSV, HTML, Markdown)
+- File export (`--output`)
+- Severity filtering (`--severity`)
+- Summary-only mode (`--summary-only`)
+- No-color mode (`--no-color`)
+- Separated severity sections (Critical vs High)
+
+### Phase 4 📋 (Planned)
+- Dynamic API discovery (CRDs, aggregated APIs)
+- Custom resource enumeration
+- Event enumeration and analysis
+- Network policy analysis
+- Ingress TLS certificate extraction
+- Persistent volume analysis
+
+### Phase 5 📋 (Planned)
+- Capability mapping & attack paths
+- Token reuse detection and validation
+- ServiceAccount impersonation testing
+- Pod escape path detection
 - MITRE ATT&CK mapping
 
 ## 📝 License

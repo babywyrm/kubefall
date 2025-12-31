@@ -6,7 +6,7 @@ Simple setup for testing kubefall in a pod.
 
 ```bash
 # On your host, create the test pod (adjust path as needed)
-bash sigh.sh /root/GOAT/kubefall
+bash simple-test-pod.sh /path/to/kubefall
 
 # Exec into the pod
 kubectl exec -it kubefall-test -n default -- /bin/bash
@@ -25,7 +25,7 @@ kubectl exec -it kubefall-test -n default -- /bin/bash
 
 1. On host: Make changes and rebuild
    ```bash
-   cd /root/GOAT/kubefall
+   cd /path/to/kubefall
    make build-linux
    ```
 
