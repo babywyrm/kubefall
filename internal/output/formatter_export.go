@@ -102,9 +102,8 @@ func (f *Formatter) OutputMarkdown(results *rbac.Results, w io.Writer) {
 		}
 	}
 
-	totalCritical := len(findings.Critical) + len(findings.High)
-	if totalCritical > 0 {
-		fmt.Fprintf(w, "## 🚨 Critical/High Findings\n\n")
+	if len(findings.Critical) > 0 {
+		fmt.Fprintf(w, "## 🔴 Critical Findings\n\n")
 		
 		for _, finding := range findings.Critical {
 			fmt.Fprintf(w, "### CRITICAL: %s in %s\n\n", finding.Resource, finding.Namespace)
@@ -115,7 +114,11 @@ func (f *Formatter) OutputMarkdown(results *rbac.Results, w io.Writer) {
 			}
 			fmt.Fprintf(w, "\n")
 		}
+	}
 
+	if len(findings.High) > 0 {
+		fmt.Fprintf(w, "## 🟠 High Severity Findings\n\n")
+		
 		for _, finding := range findings.High {
 			fmt.Fprintf(w, "### HIGH: %s in %s\n\n", finding.Resource, finding.Namespace)
 			fmt.Fprintf(w, "- **Verbs:** %s\n", strings.Join(finding.Verbs, ", "))
@@ -161,9 +164,8 @@ func (f *Formatter) OutputHTML(results *rbac.Results, w io.Writer) {
     <h1>kubefall - Kubernetes RBAC Enumeration</h1>
 `)
 
-	totalCritical := len(findings.Critical) + len(findings.High)
-	if totalCritical > 0 {
-		fmt.Fprintf(w, "    <h2>🚨 Critical/High Findings</h2>\n    <table>\n")
+	if len(findings.Critical) > 0 {
+		fmt.Fprintf(w, "    <h2>🔴 Critical Findings</h2>\n    <table>\n")
 		fmt.Fprintf(w, "        <tr><th>Severity</th><th>Resource</th><th>Namespace</th><th>Verbs</th><th>Message</th></tr>\n")
 		
 		for _, finding := range findings.Critical {
@@ -175,7 +177,13 @@ func (f *Formatter) OutputHTML(results *rbac.Results, w io.Writer) {
 			fmt.Fprintf(w, "            <td>%s</td>\n", finding.Message)
 			fmt.Fprintf(w, "        </tr>\n")
 		}
+		fmt.Fprintf(w, "    </table>\n")
+	}
 
+	if len(findings.High) > 0 {
+		fmt.Fprintf(w, "    <h2>🟠 High Severity Findings</h2>\n    <table>\n")
+		fmt.Fprintf(w, "        <tr><th>Severity</th><th>Resource</th><th>Namespace</th><th>Verbs</th><th>Message</th></tr>\n")
+		
 		for _, finding := range findings.High {
 			fmt.Fprintf(w, "        <tr class=\"high\">\n")
 			fmt.Fprintf(w, "            <td>HIGH</td>\n")

@@ -111,6 +111,7 @@ func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
 	f.printHeader(w, results)
 	f.printClusterInfo(w, results)
 	f.printCriticalFindings(w, findings)
+	f.printHighFindings(w, findings)
 	f.printRBACAnalysis(w, results)
 	f.printTokenExtraction(w, results)
 	f.printPodSecurity(w, results)
@@ -153,35 +154,44 @@ func (f *Formatter) printHeader(w io.Writer, results *rbac.Results) {
 }
 
 func (f *Formatter) printCriticalFindings(w io.Writer, findings Findings) {
-	totalCritical := len(findings.Critical) + len(findings.High)
-	if totalCritical == 0 {
+	if len(findings.Critical) == 0 {
 		return
 	}
 
-	fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorRed, colorReset)
-	fmt.Fprintf(w, "%s║%s  %s🚨 ESCALATION PATHS DETECTED 🚨%s                              %s║%s\n", colorRed, colorReset, colorBold, colorReset, colorRed, colorReset)
-	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorRed, colorReset)
+	fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", f.getColor(colorRed), f.getColor(colorReset))
+	fmt.Fprintf(w, "%s║%s  %s🔴 CRITICAL FINDINGS 🔴%s                                    %s║%s\n", f.getColor(colorRed), f.getColor(colorReset), f.getColor(colorBold), f.getColor(colorReset), f.getColor(colorRed), f.getColor(colorReset))
+	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", f.getColor(colorRed), f.getColor(colorReset))
 
 	for _, finding := range findings.Critical {
 		fmt.Fprintf(w, "%s[CRITICAL]%s %s%s%s in %s%s%s\n", 
-			colorRed, colorReset, colorBold, finding.Resource, colorReset, 
-			colorYellow, finding.Namespace, colorReset)
-		fmt.Fprintf(w, "         Verbs: %s%s%s\n", colorBold, strings.Join(finding.Verbs, ", "), colorReset)
-		fmt.Fprintf(w, "         %s%s%s\n", colorRed, finding.Message, colorReset)
+			f.getColor(colorRed), f.getColor(colorReset), f.getColor(colorBold), finding.Resource, f.getColor(colorReset), 
+			f.getColor(colorYellow), finding.Namespace, f.getColor(colorReset))
+		fmt.Fprintf(w, "         Verbs: %s%s%s\n", f.getColor(colorBold), strings.Join(finding.Verbs, ", "), f.getColor(colorReset))
+		fmt.Fprintf(w, "         %s%s%s\n", f.getColor(colorRed), finding.Message, f.getColor(colorReset))
 		if f.explain && finding.Explanation != "" {
-			fmt.Fprintf(w, "         %s→ %s%s\n", colorYellow, finding.Explanation, colorReset)
+			fmt.Fprintf(w, "         %s→ %s%s\n", f.getColor(colorYellow), finding.Explanation, f.getColor(colorReset))
 		}
 		fmt.Fprintf(w, "\n")
 	}
+}
+
+func (f *Formatter) printHighFindings(w io.Writer, findings Findings) {
+	if len(findings.High) == 0 {
+		return
+	}
+
+	fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", f.getColor(colorYellow), f.getColor(colorReset))
+	fmt.Fprintf(w, "%s║%s  %s🟠 HIGH SEVERITY FINDINGS 🟠%s                                %s║%s\n", f.getColor(colorYellow), f.getColor(colorReset), f.getColor(colorBold), f.getColor(colorReset), f.getColor(colorYellow), f.getColor(colorReset))
+	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", f.getColor(colorYellow), f.getColor(colorReset))
 
 	for _, finding := range findings.High {
 		fmt.Fprintf(w, "%s[HIGH]%s     %s%s%s in %s%s%s\n", 
-			colorYellow, colorReset, colorBold, finding.Resource, colorReset, 
-			colorYellow, finding.Namespace, colorReset)
-		fmt.Fprintf(w, "         Verbs: %s%s%s\n", colorBold, strings.Join(finding.Verbs, ", "), colorReset)
-		fmt.Fprintf(w, "         %s%s%s\n", colorYellow, finding.Message, colorReset)
+			f.getColor(colorYellow), f.getColor(colorReset), f.getColor(colorBold), finding.Resource, f.getColor(colorReset), 
+			f.getColor(colorYellow), finding.Namespace, f.getColor(colorReset))
+		fmt.Fprintf(w, "         Verbs: %s%s%s\n", f.getColor(colorBold), strings.Join(finding.Verbs, ", "), f.getColor(colorReset))
+		fmt.Fprintf(w, "         %s%s%s\n", f.getColor(colorYellow), finding.Message, f.getColor(colorReset))
 		if f.explain && finding.Explanation != "" {
-			fmt.Fprintf(w, "         %s→ %s%s\n", colorYellow, finding.Explanation, colorReset)
+			fmt.Fprintf(w, "         %s→ %s%s\n", f.getColor(colorYellow), finding.Explanation, f.getColor(colorReset))
 		}
 		fmt.Fprintf(w, "\n")
 	}
@@ -484,42 +494,49 @@ func (f *Formatter) printSummaryWithNamespaces(w io.Writer, findings Findings, a
 		fmt.Fprintf(w, "    %s%s%s\n\n", colorBold, strings.Join(allNamespaces, ", "), colorReset)
 	}
 
-	totalCritical := len(findings.Critical) + len(findings.High)
+	totalCritical := len(findings.Critical)
+	totalHigh := len(findings.High)
 	totalInteresting := len(findings.Interesting)
 	totalNormal := len(findings.Normal)
 
 	if totalCritical > 0 {
-		fmt.Fprintf(w, "%s[%d] CRITICAL/HIGH%s - Immediate escalation paths available\n", 
-			colorRed, totalCritical, colorReset)
+		fmt.Fprintf(w, "%s[%d] CRITICAL%s - Immediate escalation paths available\n", 
+			f.getColor(colorRed), totalCritical, f.getColor(colorReset))
 		for _, finding := range findings.Critical {
-			fmt.Fprintf(w, "    • %s%s%s in %s\n", colorBold, finding.Resource, colorReset, finding.Namespace)
+			fmt.Fprintf(w, "    • %s%s%s in %s\n", f.getColor(colorBold), finding.Resource, f.getColor(colorReset), finding.Namespace)
 		}
+		fmt.Fprintf(w, "\n")
+	}
+
+	if totalHigh > 0 {
+		fmt.Fprintf(w, "%s[%d] HIGH%s - Significant security risks\n", 
+			f.getColor(colorYellow), totalHigh, f.getColor(colorReset))
 		for _, finding := range findings.High {
-			fmt.Fprintf(w, "    • %s%s%s in %s\n", colorBold, finding.Resource, colorReset, finding.Namespace)
+			fmt.Fprintf(w, "    • %s%s%s in %s\n", f.getColor(colorBold), finding.Resource, f.getColor(colorReset), finding.Namespace)
 		}
 		fmt.Fprintf(w, "\n")
 	}
 
 	if totalInteresting > 0 {
 		fmt.Fprintf(w, "%s[%d] INTERESTING%s - Potential data exfiltration or lateral movement\n", 
-			colorYellow, totalInteresting, colorReset)
+			f.getColor(colorYellow), totalInteresting, f.getColor(colorReset))
 		for _, finding := range findings.Interesting {
-			fmt.Fprintf(w, "    • %s%s%s in %s\n", colorBold, finding.Resource, colorReset, finding.Namespace)
+			fmt.Fprintf(w, "    • %s%s%s in %s\n", f.getColor(colorBold), finding.Resource, f.getColor(colorReset), finding.Namespace)
 		}
 		fmt.Fprintf(w, "\n")
 	}
 
 	if totalNormal > 0 {
 		fmt.Fprintf(w, "%s[%d] NORMAL%s - Standard permissions\n\n", 
-			colorGreen, totalNormal, colorReset)
+			f.getColor(colorGreen), totalNormal, f.getColor(colorReset))
 	}
 
-	if totalCritical == 0 && totalInteresting == 0 {
-		fmt.Fprintf(w, "%s✓ No obvious escalation paths detected%s\n", colorGreen, colorReset)
-		fmt.Fprintf(w, "%s  Consider using --dump to inspect readable resources%s\n\n", colorYellow, colorReset)
+	if totalCritical == 0 && totalHigh == 0 && totalInteresting == 0 {
+		fmt.Fprintf(w, "%s✓ No obvious escalation paths detected%s\n", f.getColor(colorGreen), f.getColor(colorReset))
+		fmt.Fprintf(w, "%s  Consider using --dump to inspect readable resources%s\n\n", f.getColor(colorYellow), f.getColor(colorReset))
 	} else {
-		fmt.Fprintf(w, "%s💡 TIP:%s Use --dump to extract secrets/configmaps/serviceaccounts\n", colorYellow, colorReset)
-		fmt.Fprintf(w, "%s💡 TIP:%s Use --explain for detailed explanations of findings\n\n", colorYellow, colorReset)
+		fmt.Fprintf(w, "%s💡 TIP:%s Use --dump to extract secrets/configmaps/serviceaccounts\n", f.getColor(colorYellow), f.getColor(colorReset))
+		fmt.Fprintf(w, "%s💡 TIP:%s Use --explain for detailed explanations of findings\n\n", f.getColor(colorYellow), f.getColor(colorReset))
 	}
 }
 
