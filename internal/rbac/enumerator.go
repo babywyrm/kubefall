@@ -259,6 +259,16 @@ func (e *Enumerator) Enumerate(dump bool) (*Results, error) {
 						dumpData := e.dumpResource(ns, r)
 						if dumpData != "" {
 							nsPerms.Dumps[r] = dumpData
+							if e.verbose && r == "events" {
+								// Debug: check if events dump has content
+								if len(dumpData) > 100 {
+									fmt.Fprintf(os.Stderr, "      [+] Events dump: %d bytes\n", len(dumpData))
+								} else {
+									fmt.Fprintf(os.Stderr, "      [-] Events dump: empty or small (%d bytes)\n", len(dumpData))
+								}
+							}
+						} else if e.verbose && r == "events" {
+							fmt.Fprintf(os.Stderr, "      [-] Events dump failed (empty response)\n")
 						}
 					}
 				}
