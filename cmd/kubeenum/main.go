@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/babywyrm/kubefall/internal/analysis"
 	"github.com/babywyrm/kubefall/internal/context"
@@ -25,12 +27,17 @@ func containsAny(slice []string, values []string) bool {
 
 func main() {
 	var (
-		dump    = flag.Bool("dump", false, "Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)")
-		full    = flag.Bool("full", false, "Print full contents of extracted resources (use with --dump)")
-		jsonOut = flag.Bool("json", false, "Output results in JSON (machine-readable)")
-		mode    = flag.String("mode", "red", "Output mode: red (exploit-focused), blue (detection-focused), audit (compliance)")
-		explain = flag.Bool("explain", false, "Explain why findings are significant")
-		verbose = flag.Bool("verbose", false, "Show detailed progress of what is being checked")
+		dump        = flag.Bool("dump", false, "Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)")
+		full        = flag.Bool("full", false, "Print full contents of extracted resources (use with --dump)")
+		jsonOut     = flag.Bool("json", false, "Output results in JSON (machine-readable)")
+		format      = flag.String("format", "text", "Output format: text, json, csv, html, markdown")
+		outputFile  = flag.String("output", "", "Write output to file (default: stdout)")
+		severity    = flag.String("severity", "", "Filter by severity: critical,high,interesting,normal (comma-separated, e.g. 'critical,high')")
+		summaryOnly = flag.Bool("summary-only", false, "Show only summary section")
+		noColor     = flag.Bool("no-color", false, "Disable colored output")
+		mode        = flag.String("mode", "red", "Output mode: red (exploit-focused), blue (detection-focused), audit (compliance)")
+		explain     = flag.Bool("explain", false, "Explain why findings are significant")
+		verbose     = flag.Bool("verbose", false, "Show detailed progress of what is being checked")
 	)
 
 	flag.Usage = func() {
@@ -41,20 +48,26 @@ Usage:
   kubeenum [options]
 
 Options:
-  --dump       Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)
-  --full       Print full contents of extracted resources (use with --dump)
-  --json       Output results in JSON (machine-readable)
-  --mode       Output mode: red (exploit-focused), blue (detection-focused), audit (compliance) [default: red]
-  --explain    Explain why findings are significant
-  --verbose    Show detailed progress of what is being checked
-  -h, --help   Show this help message
+  --dump         Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)
+  --full         Print full contents of extracted resources (use with --dump)
+  --format       Output format: text, json, csv, html, markdown [default: text]
+  --output       Write output to file (default: stdout)
+  --severity     Filter by severity: critical,high,interesting,normal (comma-separated)
+  --summary-only Show only summary section
+  --no-color     Disable colored output
+  --mode         Output mode: red (exploit-focused), blue (detection-focused), audit (compliance) [default: red]
+  --explain      Explain why findings are significant
+  --verbose      Show detailed progress of what is being checked
+  -h, --help     Show this help message
 
 Examples:
   kubeenum
   kubeenum --dump
   kubeenum --dump --full
-  kubeenum --json
-  kubeenum --json --dump
+  kubeenum --format json --output results.json
+  kubeenum --severity critical,high
+  kubeenum --summary-only
+  kubeenum --format csv --output findings.csv
   kubeenum --mode blue --explain
 `)
 	}
@@ -175,13 +188,44 @@ Examples:
 		}
 	}
 
+	// Determine output writer
+	var w io.Writer = os.Stdout
+	if *outputFile != "" {
+		file, err := os.Create(*outputFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: Failed to create output file: %v\n", err)
+			os.Exit(1)
+		}
+		defer file.Close()
+		w = file
+	}
+
+	// Parse severity filter
+	severityFilter := []string{}
+	if *severity != "" {
+		severityFilter = strings.Split(*severity, ",")
+		for i := range severityFilter {
+			severityFilter[i] = strings.TrimSpace(strings.ToLower(severityFilter[i]))
+		}
+	}
+
 	// Output results
 	outputMode := output.ParseMode(*mode)
-	formatter := output.NewFormatter(outputMode, *explain, *full)
+	formatter := output.NewFormatter(outputMode, *explain, *full, *noColor, *summaryOnly, severityFilter)
 
-	if *jsonOut {
-		formatter.OutputJSON(results, os.Stdout)
+	// Handle format
+	if *jsonOut || *format == "json" {
+		formatter.OutputJSON(results, w)
 	} else {
-		formatter.OutputHuman(results, os.Stdout)
+		switch *format {
+		case "csv":
+			formatter.OutputCSV(results, w)
+		case "html":
+			formatter.OutputHTML(results, w)
+		case "markdown":
+			formatter.OutputMarkdown(results, w)
+		default:
+			formatter.OutputHuman(results, w)
+		}
 	}
 }

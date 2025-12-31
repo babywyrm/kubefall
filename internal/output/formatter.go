@@ -22,6 +22,13 @@ const (
 	colorBold   = "\033[1m"
 )
 
+func (f *Formatter) getColor(color string) string {
+	if f.noColor {
+		return ""
+	}
+	return color
+}
+
 type Mode int
 
 const (
@@ -42,16 +49,22 @@ func ParseMode(s string) Mode {
 }
 
 type Formatter struct {
-	mode    Mode
-	explain bool
-	full    bool
+	mode          Mode
+	explain       bool
+	full          bool
+	noColor       bool
+	summaryOnly   bool
+	severityFilter []string
 }
 
-func NewFormatter(mode Mode, explain bool, full bool) *Formatter {
+func NewFormatter(mode Mode, explain bool, full bool, noColor bool, summaryOnly bool, severityFilter []string) *Formatter {
 	return &Formatter{
-		mode:    mode,
-		explain: explain,
-		full:    full,
+		mode:          mode,
+		explain:       explain,
+		full:          full,
+		noColor:       noColor,
+		summaryOnly:   summaryOnly,
+		severityFilter: severityFilter,
 	}
 }
 
@@ -82,8 +95,18 @@ type Findings struct {
 
 func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
 	findings := f.collectFindings(results)
+	
+	// Apply severity filter
+	if len(f.severityFilter) > 0 {
+		findings = f.filterFindings(findings)
+	}
 
 	allNamespaces := f.getAllNamespaces(results)
+
+	if f.summaryOnly {
+		f.printSummaryWithNamespaces(w, findings, allNamespaces)
+		return
+	}
 
 	f.printHeader(w, results)
 	f.printClusterInfo(w, results)
@@ -107,9 +130,9 @@ func (f *Formatter) getAllNamespaces(results *rbac.Results) []string {
 }
 
 func (f *Formatter) printHeader(w io.Writer, results *rbac.Results) {
-	fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorBold, colorReset)
-	fmt.Fprintf(w, "%s║%s  %sKUBEFALL - Kubernetes RBAC Enumeration%s                    %s║%s\n", colorBold, colorReset, colorBold, colorReset, colorBold, colorReset)
-	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorBold, colorReset)
+	fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", f.getColor(colorBold), f.getColor(colorReset))
+	fmt.Fprintf(w, "%s║%s  %sKUBEFALL - Kubernetes RBAC Enumeration%s                    %s║%s\n", f.getColor(colorBold), f.getColor(colorReset), f.getColor(colorBold), f.getColor(colorReset), f.getColor(colorBold), f.getColor(colorReset))
+	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", f.getColor(colorBold), f.getColor(colorReset))
 
 	if results.Context != nil {
 		if ctx, ok := results.Context.(*context.Context); ok {
