@@ -2,7 +2,7 @@
 
 Based on comprehensive Kubernetes pentest research, we've added several critical features to make kubefall more comprehensive and practical for both red and blue teams.
 
-## ✅ Completed Enhancements
+## ✅ Completed Enhancements (Latest Update)
 
 ### 1. **Pod Security Context Analysis** (`internal/analysis/pods.go`)
 **Priority: CRITICAL**
@@ -38,32 +38,59 @@ Deep analysis of RBAC configurations:
 
 **Usage:** Automatically runs when clusterrolebindings are readable.
 
-### 4. **Enhanced Output Display**
-**Priority: MEDIUM**
+### 4. **Service Account Token Extraction** (`internal/analysis/tokens.go`)
+**Priority: HIGH**
 
-New sections in output:
-- **Cluster Info** - Version and node details
-- **Pod Security Analysis** - Dangerous pod configurations with color-coding
-- **RBAC Analysis** - Cluster-admin bindings and dangerous roles
+Automatically extracts and validates ServiceAccount tokens:
+- **Token Discovery**: Finds SA tokens in secrets (type: `kubernetes.io/service-account-token`)
+- **Token Validation**: Decodes JWT claims and validates tokens
+- **High-Privilege SA Detection**: Identifies ServiceAccounts with potentially elevated privileges
+- **SA Enumeration**: Lists all ServiceAccounts from pods and ServiceAccount resources
 
-All findings are color-coded and prioritized:
-- 🔴 **Critical** - Immediate escalation risks (privileged pods, cluster-admin)
-- 🟠 **High** - Significant risks (hostNetwork, dangerous capabilities)
-- 🟡 **Interesting** - Potential attack surfaces
+**Usage:** Automatically runs when `--dump` is used and you have secret/pod/serviceaccount read permissions.
+
+### 5. **Enhanced Output Display & Export**
+**Priority: HIGH**
+
+**New Output Formats:**
+- **CSV Export** - For spreadsheet analysis (`--format csv`)
+- **HTML Reports** - Visual reports with tables (`--format html`)
+- **Markdown** - Documentation-friendly format (`--format markdown`)
+- **File Export** - Write to file (`--output filename`)
+
+**Filtering & Display Options:**
+- **Severity Filtering** - Show only specific severities (`--severity critical,high`)
+- **Summary Only** - Condensed output (`--summary-only`)
+- **No Color** - Script-friendly output (`--no-color`)
+
+**Separated Severity Sections:**
+- 🔴 **CRITICAL FINDINGS** - Separate red banner section
+- 🟠 **HIGH SEVERITY FINDINGS** - Separate yellow banner section
+- 🟡 **INTERESTING FINDINGS** - Yellow section
+- 🟢 **NORMAL** - Standard permissions
+
+This separation allows for future extensibility (medium, low, info levels).
 
 ## 📋 What's Next (Future Phases)
 
-### Phase 2 (Recommended Next Steps)
+### Phase 4: Advanced Enumeration (Next Priorities)
 1. **Dynamic API Discovery** - Automatically discover CRDs and custom resources
-2. **Service Account Token Extraction** - Extract tokens from pod specifications
-3. **Event Enumeration** - Recent security events and failed auth attempts
-4. **Network Policy Analysis** - Identify missing network segmentation
+2. **Event Enumeration** - Recent security events and failed auth attempts
+3. **Network Policy Analysis** - Identify missing network segmentation
+4. **Ingress TLS Analysis** - Certificate and routing configuration
+5. **Persistent Volume Analysis** - Storage configuration and access modes
 
-### Phase 3 (Advanced Features)
-1. **Custom Resource Discovery** - Test SSAR against discovered CRDs
-2. **Ingress TLS Analysis** - Certificate and routing configuration
-3. **Persistent Volume Analysis** - Storage configuration and access modes
-4. **MITRE ATT&CK Mapping** - Map findings to attack techniques
+### Phase 5: Attack Path Analysis
+1. **Capability Mapping** - Map permissions to actual attack capabilities
+2. **Attack Path Generation** - Generate attack paths with confidence scoring
+3. **Token Reuse Detection** - Test discovered tokens for different permissions
+4. **ServiceAccount Impersonation Testing** - Test impersonation capabilities
+
+### Phase 6: Detection & Compliance
+1. **MITRE ATT&CK Mapping** - Map findings to attack techniques
+2. **Falco Rule Generation** - Generate detection rules based on findings
+3. **Compliance Checks** - CIS, NSA, and other compliance frameworks
+4. **Baseline Comparison** - Compare against known-good configurations
 
 ## 🔧 Technical Implementation
 
@@ -119,8 +146,17 @@ When you run `kubeenum --dump`, you'll now see:
 # Full enumeration with complete data display
 ./kubeenum --dump --full
 
+# Export only critical/high findings to CSV
+./kubeenum --dump --severity critical,high --format csv --output critical.csv
+
+# Generate HTML report
+./kubeenum --dump --format html --output report.html
+
+# Summary only (condensed)
+./kubeenum --summary-only
+
 # JSON output for automation
-./kubeenum --dump --json
+./kubeenum --dump --format json --output results.json
 ```
 
 ## 🔍 Detection Coverage
@@ -134,6 +170,36 @@ The tool now checks for:
 - ✅ Wildcard RBAC permissions
 - ✅ Cluster version (CVE hunting)
 - ✅ Node information
+- ✅ ServiceAccount tokens in secrets
+- ✅ High-privilege ServiceAccounts
+- ✅ Extracted credentials and tokens
+- ✅ Network services and exposure
 
 All findings are automatically prioritized and displayed with actionable information for both attackers and defenders.
+
+## 📊 Output Formats
+
+The tool supports multiple output formats for different use cases:
+
+- **Text** (default): Human-readable, color-coded output
+- **JSON**: Machine-readable for automation and integration
+- **CSV**: Spreadsheet-friendly for analysis and filtering
+- **HTML**: Visual reports with tables and styling
+- **Markdown**: Documentation-friendly format
+
+## 🎛️ Filtering Options
+
+- **Severity Filtering**: Focus on specific severity levels
+  - `--severity critical` - Only critical findings
+  - `--severity critical,high` - Critical and high findings
+  - `--severity interesting` - Only interesting findings
+
+- **Summary Mode**: Quick overview without detailed sections
+  - `--summary-only` - Just the summary section
+
+- **File Export**: Save results for later analysis
+  - `--output filename` - Write to file instead of stdout
+
+- **No Color**: For scripts and logs
+  - `--no-color` - Disable ANSI color codes
 
