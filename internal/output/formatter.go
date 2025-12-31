@@ -106,7 +106,7 @@ func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
 	allNamespaces := f.getAllNamespaces(results)
 
 	if f.summaryOnly {
-		f.printSummaryWithNamespaces(w, findings, allNamespaces)
+		f.printSummaryWithNamespaces(w, findings, allNamespaces, results)
 		return
 	}
 
@@ -117,11 +117,11 @@ func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
 	f.printRBACAnalysis(w, results)
 	f.printTokenExtraction(w, results)
 	f.printPodSecurity(w, results)
-	f.printEventAnalysis(w, results)
 	f.printExtractedData(w, results)
 	f.printServices(w, results)
 	f.printDetailedResults(w, results, findings)
-	f.printSummaryWithNamespaces(w, findings, allNamespaces)
+	f.printSummaryWithNamespaces(w, findings, allNamespaces, results)
+	f.printEventAnalysis(w, results)
 }
 
 func (f *Formatter) getAllNamespaces(results *rbac.Results) []string {
@@ -484,10 +484,10 @@ func (f *Formatter) printServices(w io.Writer, results *rbac.Results) {
 }
 
 func (f *Formatter) printSummary(w io.Writer, findings Findings) {
-	f.printSummaryWithNamespaces(w, findings, nil)
+	f.printSummaryWithNamespaces(w, findings, nil, nil)
 }
 
-func (f *Formatter) printSummaryWithNamespaces(w io.Writer, findings Findings, allNamespaces []string) {
+func (f *Formatter) printSummaryWithNamespaces(w io.Writer, findings Findings, allNamespaces []string, results *rbac.Results) {
 	fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorBold, colorReset)
 	fmt.Fprintf(w, "%s║%s  %sSUMMARY%s                                                      %s║%s\n", colorBold, colorReset, colorBold, colorReset, colorBold, colorReset)
 	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorBold, colorReset)
@@ -534,13 +534,68 @@ func (f *Formatter) printSummaryWithNamespaces(w io.Writer, findings Findings, a
 			f.getColor(colorGreen), totalNormal, f.getColor(colorReset))
 	}
 
+	// Add event analysis summary if available
+	if results != nil && results.EventAnalysis != nil {
+		if eventAnalysisMap, ok := results.EventAnalysis.(map[string]interface{}); ok {
+			eventSummary := f.getEventSummary(eventAnalysisMap)
+			if eventSummary.TotalEvents > 0 {
+				fmt.Fprintf(w, "%s[EVENT ANALYSIS]%s\n", f.getColor(colorBlue), f.getColor(colorReset))
+				if eventSummary.FailedAuth > 0 {
+					fmt.Fprintf(w, "    %s🔴 Failed Auth:%s %d\n", f.getColor(colorRed), f.getColor(colorReset), eventSummary.FailedAuth)
+				}
+				if eventSummary.RBACChanges > 0 {
+					fmt.Fprintf(w, "    %s🟠 RBAC Changes:%s %d\n", f.getColor(colorYellow), f.getColor(colorReset), eventSummary.RBACChanges)
+				}
+				if eventSummary.SecretAccess > 0 {
+					fmt.Fprintf(w, "    %s🔑 Secret Access:%s %d\n", f.getColor(colorYellow), f.getColor(colorReset), eventSummary.SecretAccess)
+				}
+				if eventSummary.ImagePullFailures > 0 {
+					fmt.Fprintf(w, "    %s⚠️  Image Pull Failures:%s %d\n", f.getColor(colorYellow), f.getColor(colorReset), eventSummary.ImagePullFailures)
+				}
+				if eventSummary.PodCreations > 0 {
+					fmt.Fprintf(w, "    %s📦 Pod Creations:%s %d\n", f.getColor(colorYellow), f.getColor(colorReset), eventSummary.PodCreations)
+				}
+				fmt.Fprintf(w, "\n")
+			}
+		}
+	}
+
 	if totalCritical == 0 && totalHigh == 0 && totalInteresting == 0 {
 		fmt.Fprintf(w, "%s✓ No obvious escalation paths detected%s\n", f.getColor(colorGreen), f.getColor(colorReset))
 		fmt.Fprintf(w, "%s  Consider using --dump to inspect readable resources%s\n\n", f.getColor(colorYellow), f.getColor(colorReset))
 	} else {
 		fmt.Fprintf(w, "%s💡 TIP:%s Use --dump to extract secrets/configmaps/serviceaccounts\n", f.getColor(colorYellow), f.getColor(colorReset))
-		fmt.Fprintf(w, "%s💡 TIP:%s Use --explain for detailed explanations of findings\n\n", f.getColor(colorYellow), f.getColor(colorReset))
+		fmt.Fprintf(w, "%s💡 TIP:%s Use --explain for detailed explanations of findings\n", f.getColor(colorYellow), f.getColor(colorReset))
+		if results != nil && results.EventAnalysis == nil {
+			fmt.Fprintf(w, "%s💡 TIP:%s Use --events to analyze Kubernetes events\n", f.getColor(colorYellow), f.getColor(colorReset))
+		}
+		fmt.Fprintf(w, "\n")
 	}
+}
+
+type EventSummary struct {
+	TotalEvents       int
+	FailedAuth        int
+	RBACChanges       int
+	SecretAccess      int
+	ImagePullFailures int
+	PodCreations      int
+}
+
+func (f *Formatter) getEventSummary(eventAnalysisMap map[string]interface{}) EventSummary {
+	summary := EventSummary{}
+	for _, data := range eventAnalysisMap {
+		if eventAnalysis, ok := data.(*analysis.EventAnalysis); ok {
+			summary.FailedAuth += len(eventAnalysis.FailedAuth)
+			summary.RBACChanges += len(eventAnalysis.RBACChanges)
+			summary.SecretAccess += len(eventAnalysis.SecretAccess)
+			summary.ImagePullFailures += len(eventAnalysis.ImagePullFailures)
+			summary.PodCreations += len(eventAnalysis.PodCreations)
+		}
+	}
+	summary.TotalEvents = summary.FailedAuth + summary.RBACChanges + summary.SecretAccess + 
+		summary.ImagePullFailures + summary.PodCreations
+	return summary
 }
 
 func (f *Formatter) collectFindings(results *rbac.Results) Findings {
