@@ -185,6 +185,20 @@ Examples:
 		if len(tokenExtraction.ServiceAccountTokens) > 0 || len(tokenExtraction.HighPrivilegeSAs) > 0 || len(tokenExtraction.AllServiceAccounts) > 0 {
 			results.TokenExtraction = tokenExtraction
 		}
+
+		// Analyze NetworkPolicies
+		networkPolicyDumps := make(map[string]string)
+		allNamespaces := []string{}
+		for ns, perms := range results.Permissions.Namespaces {
+			allNamespaces = append(allNamespaces, ns)
+			if npData, ok := perms.Dumps["networkpolicies"]; ok && npData != "" {
+				networkPolicyDumps[ns] = npData
+			}
+		}
+		if len(networkPolicyDumps) > 0 || len(allNamespaces) > 0 {
+			networkPolicyAnalysis := analysis.AnalyzeNetworkPolicies(networkPolicyDumps, allNamespaces)
+			results.NetworkPolicyAnalysis = networkPolicyAnalysis
+		}
 	}
 
 	// Analyze RBAC if we can read cluster roles/bindings

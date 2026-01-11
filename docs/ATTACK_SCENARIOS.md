@@ -395,3 +395,4 @@ kubeenum --auto-discover  # Try all methods
    - Never log full tokens/certs
    - Redact sensitive data in output
 
+

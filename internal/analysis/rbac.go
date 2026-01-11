@@ -170,3 +170,4 @@ func AnalyzeClusterRoles(rolesData string) *RBACAnalysis {
 	return analysis
 }
 
+

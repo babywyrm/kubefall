@@ -94,3 +94,4 @@ else
     kubectl logs kubefall-test -n default
 fi
 
+

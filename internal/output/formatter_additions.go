@@ -415,3 +415,80 @@ func (f *Formatter) printEventAnalysis(w io.Writer, results *rbac.Results) {
 		}
 	}
 }
+
+func (f *Formatter) printNetworkPolicyAnalysis(w io.Writer, results *rbac.Results) {
+	if results.NetworkPolicyAnalysis == nil {
+		return
+	}
+
+	if npAnalysis, ok := results.NetworkPolicyAnalysis.(*analysis.NetworkPolicyAnalysis); ok {
+		hasFindings := false
+
+		// Namespaces without NetworkPolicies (permissive - allow all traffic)
+		if len(npAnalysis.NamespacesWithoutPolicies) > 0 {
+			hasFindings = true
+			fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorYellow, colorReset)
+			fmt.Fprintf(w, "%s║%s  %s🌐 NETWORK POLICY ANALYSIS 🌐%s                              %s║%s\n", colorYellow, colorReset, colorBold, colorReset, colorYellow, colorReset)
+			fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorYellow, colorReset)
+
+			fmt.Fprintf(w, "  %s⚠️  NAMESPACES WITHOUT NETWORK POLICIES (Permissive - Allow All Traffic):%s\n", colorYellow, colorReset)
+			fmt.Fprintf(w, "     By default, namespaces without NetworkPolicies allow ALL traffic.\n")
+			fmt.Fprintf(w, "     Consider implementing NetworkPolicies for network segmentation.\n\n")
+			
+			for _, ns := range npAnalysis.NamespacesWithoutPolicies {
+				fmt.Fprintf(w, "    • %s%s%s\n", colorBold, ns, colorReset)
+			}
+			fmt.Fprintf(w, "\n")
+		}
+
+		// NetworkPolicies found
+		if len(npAnalysis.NetworkPoliciesFound) > 0 {
+			if !hasFindings {
+				fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorBlue, colorReset)
+				fmt.Fprintf(w, "%s║%s  %s🌐 NETWORK POLICY ANALYSIS 🌐%s                              %s║%s\n", colorBlue, colorReset, colorBold, colorReset, colorBlue, colorReset)
+				fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorBlue, colorReset)
+				hasFindings = true
+			}
+
+			fmt.Fprintf(w, "  %s📋 NETWORK POLICIES FOUND (%d):%s\n", colorBold, len(npAnalysis.NetworkPoliciesFound), colorReset)
+			for _, np := range npAnalysis.NetworkPoliciesFound {
+				policyTypes := strings.Join(np.PolicyTypes, ", ")
+				if policyTypes == "" {
+					policyTypes = "default"
+				}
+				fmt.Fprintf(w, "    • %s%s%s/%s%s%s (types: %s%s%s)\n", 
+					colorBold, np.Namespace, colorReset,
+					colorYellow, np.Name, colorReset,
+					colorBlue, policyTypes, colorReset)
+			}
+			fmt.Fprintf(w, "\n")
+		}
+
+		// Deny-all policies (policies with empty rules)
+		if len(npAnalysis.DenyAllPolicies) > 0 {
+			if !hasFindings {
+				fmt.Fprintf(w, "%s╔════════════════════════════════════════════════════════════╗%s\n", colorBlue, colorReset)
+				fmt.Fprintf(w, "%s║%s  %s🌐 NETWORK POLICY ANALYSIS 🌐%s                              %s║%s\n", colorBlue, colorReset, colorBold, colorReset, colorBlue, colorReset)
+				fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", colorBlue, colorReset)
+				hasFindings = true
+			}
+
+			fmt.Fprintf(w, "  %s🚫 DENY-ALL POLICIES (Empty Rules - Block All Traffic):%s\n", colorYellow, colorReset)
+			for _, np := range npAnalysis.DenyAllPolicies {
+				policyTypes := strings.Join(np.PolicyTypes, ", ")
+				if policyTypes == "" {
+					policyTypes = "default"
+				}
+				fmt.Fprintf(w, "    • %s%s%s/%s%s%s (types: %s%s%s)\n", 
+					colorBold, np.Namespace, colorReset,
+					colorRed, np.Name, colorReset,
+					colorYellow, policyTypes, colorReset)
+			}
+			fmt.Fprintf(w, "\n")
+		}
+
+		if !hasFindings {
+			return
+		}
+	}
+}

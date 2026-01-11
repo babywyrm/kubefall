@@ -121,6 +121,7 @@ func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
 	f.printServices(w, results)
 	f.printDetailedResults(w, results, findings)
 	f.printSummaryWithNamespaces(w, findings, allNamespaces, results)
+	f.printNetworkPolicyAnalysis(w, results)
 	f.printEventAnalysis(w, results)
 }
 

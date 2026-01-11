@@ -82,6 +82,7 @@ type Results struct {
 	RBACAnalysis  interface{} `json:"rbacanalysis,omitempty"`
 	TokenExtraction interface{} `json:"tokenextraction,omitempty"`
 	EventAnalysis interface{} `json:"eventanalysis,omitempty"`
+	NetworkPolicyAnalysis interface{} `json:"networkpolicyanalysis,omitempty"`
 }
 
 type Permissions struct {
@@ -252,7 +253,7 @@ func (e *Enumerator) Enumerate(dump bool, events bool) (*Results, error) {
 
 				// Dump resources if requested and readable
 				shouldDump := false
-				if dump && contains([]string{"secrets", "configmaps", "pods", "services", "serviceaccounts"}, r) {
+				if dump && contains([]string{"secrets", "configmaps", "pods", "services", "serviceaccounts", "networkpolicies"}, r) {
 					shouldDump = true
 				}
 				if events && r == "events" {
