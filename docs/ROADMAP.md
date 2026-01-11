@@ -60,15 +60,20 @@
 - Output formats support both human-readable and machine-readable formats
 - Severity-based filtering allows focused analysis
 - Token extraction works with ServiceAccount token secrets
+- Pod security analysis (privileged, hostNetwork, hostPID, hostIPC, hostPath, capabilities)
+- Event analysis (optional, `--events` flag)
+- NetworkPolicy analysis (optional, `--network-policies` flag)
+- Reliability features (HTTP timeouts, retry logic, early bailout)
 
 ### Next Priorities
 1. **Dynamic API Discovery**: Automatically discover CRDs and test permissions
-2. **Event Enumeration**: Analyze recent events for security-relevant activity
-3. **Network Policy Analysis**: Identify missing network segmentation
-4. **Attack Path Generation**: Map permissions to actual attack capabilities
+2. **Attack Path Generation**: Map permissions to actual attack capabilities
+3. **Cloud Metadata Abuse**: IMDS, Workload Identity enumeration
+4. **Out-of-cluster Support**: kubeconfig-based enumeration
 
 ### Architecture Decisions
 - Modular design allows easy extension
 - SSAR-based enumeration is stealthy and doesn't require RBAC read permissions
 - Severity levels are clearly separated for future extensibility
 - Export formats support integration with other tools
+- Optional features (events, network-policies) disabled by default for performance

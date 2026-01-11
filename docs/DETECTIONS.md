@@ -4,8 +4,12 @@ This document provides detailed explanations of what kubefall detects, why each 
 
 ## Pod Security Context Analysis
 
-### Privileged Pods
+> **Severity Classification:** Pod security findings are displayed in the "🔒 POD SECURITY ANALYSIS" section. The severity is indicated by color: **🔴 Red (Critical)** for privileged pods, **🟡 Yellow (Warning)** for hostNetwork/hostPID/hostIPC. These are separate from RBAC severity classifications (critical/high/interesting/normal).
+
+### Privileged Pods 🔴 **CRITICAL**
 **What it detects:** Pods with `securityContext.privileged: true`
+
+**Severity:** 🔴 **Critical** - Direct privilege escalation path to host root access
 
 **Real-world impact:**
 - **Container escape** - Privileged containers can escape container boundaries and gain root access to the host node
@@ -18,8 +22,10 @@ This document provides detailed explanations of what kubefall detects, why each 
 
 ---
 
-### HostNetwork Pods
+### HostNetwork Pods 🟡 **WARNING**
 **What it detects:** Pods with `spec.hostNetwork: true`
+
+**Severity:** 🟡 **Warning/High** - Security risk but not direct privilege escalation
 
 **Real-world impact:**
 - **Network bypass** - Pods share the host's network namespace, bypassing NetworkPolicy restrictions
@@ -33,8 +39,10 @@ This document provides detailed explanations of what kubefall detects, why each 
 
 ---
 
-### HostPID Pods
+### HostPID Pods 🟡 **WARNING**
 **What it detects:** Pods with `spec.hostPID: true`
+
+**Severity:** 🟡 **Warning/High** - Security risk but not direct privilege escalation
 
 **Real-world impact:**
 - **Process visibility** - Can see all processes running on the host node, including processes in other pods
@@ -48,13 +56,17 @@ This document provides detailed explanations of what kubefall detects, why each 
 
 ---
 
-### HostIPC Pods
+### HostIPC Pods 🟡 **WARNING**
 **What it detects:** Pods with `spec.hostIPC: true`
+
+**Severity:** 🟡 **Warning/High** - Data leakage risk, not direct privilege escalation
 
 **Real-world impact:**
 - **Shared memory access** - Can access shared memory segments (`/dev/shm`) and IPC facilities (message queues, semaphores)
 - **Inter-process communication** - Can read/write to IPC mechanisms used by host processes or other pods
 - **Data leakage** - Applications using shared memory may leak sensitive data accessible to hostIPC pods
+
+**Why it's warning, not critical:** Unlike privileged pods (which can escape to host root) or hostNetwork/hostPID (which enable credential theft), hostIPC primarily enables information disclosure through shared memory. It's a data leakage risk, not a direct privilege escalation path.
 
 **Attack scenario:** An attacker uses hostIPC to access shared memory containing sensitive data, intercept IPC messages, or interfere with host process communication.
 

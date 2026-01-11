@@ -1,0 +1,15 @@
+# Test pod with HostIPC enabled
+# Use this to test HostIPC detection in kubefall
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-hostipc
+  namespace: default
+spec:
+  hostIPC: true  # This is what we're testing
+  containers:
+  - name: test
+    image: busybox:latest
+    command: ["sleep", "3600"]
+  restartPolicy: Never
+
