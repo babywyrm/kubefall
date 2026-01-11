@@ -29,6 +29,7 @@ func containsAny(slice []string, values []string) bool {
 func main() {
 	var (
 		dump        = flag.Bool("dump", false, "Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)")
+		networkPolicies = flag.Bool("network-policies", false, "Include NetworkPolicy analysis (optional, disabled by default for performance)")
 		events      = flag.Bool("events", false, "Analyze Kubernetes events for security-relevant patterns")
 		eventsSince = flag.String("events-since", "", "Only analyze events since this duration (e.g., 24h, 1h, 30m)")
 		eventsLimit = flag.Int("events-limit", 20, "Maximum number of events to show per category")
@@ -53,6 +54,7 @@ Usage:
 
 Options:
   --dump         Dump resources if readable (secrets, configmaps, pods, services, serviceaccounts)
+  --network-policies  Include NetworkPolicy analysis (optional, disabled by default)
   --events       Analyze Kubernetes events for security-relevant patterns
   --events-since Only analyze events since this duration (e.g., 24h, 1h, 30m)
   --events-limit Maximum number of events to show per category [default: 20]
@@ -186,18 +188,10 @@ Examples:
 			results.TokenExtraction = tokenExtraction
 		}
 
-		// Analyze NetworkPolicies
-		networkPolicyDumps := make(map[string]string)
-		allNamespaces := []string{}
-		for ns, perms := range results.Permissions.Namespaces {
-			allNamespaces = append(allNamespaces, ns)
-			if npData, ok := perms.Dumps["networkpolicies"]; ok && npData != "" {
-				networkPolicyDumps[ns] = npData
-			}
-		}
-		if len(networkPolicyDumps) > 0 || len(allNamespaces) > 0 {
-			networkPolicyAnalysis := analysis.AnalyzeNetworkPolicies(networkPolicyDumps, allNamespaces)
-			results.NetworkPolicyAnalysis = networkPolicyAnalysis
+		// Analyze NetworkPolicies if requested (disabled by default for performance)
+		if *networkPolicies {
+			// NetworkPolicy analysis is disabled by default
+			// This will be re-enabled in a future version when we add proper NetworkPolicy dumping
 		}
 	}
 

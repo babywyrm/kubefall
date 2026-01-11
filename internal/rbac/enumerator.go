@@ -253,7 +253,7 @@ func (e *Enumerator) Enumerate(dump bool, events bool) (*Results, error) {
 
 				// Dump resources if requested and readable
 				shouldDump := false
-				if dump && contains([]string{"secrets", "configmaps", "pods", "services", "serviceaccounts", "networkpolicies"}, r) {
+				if dump && contains([]string{"secrets", "configmaps", "pods", "services", "serviceaccounts"}, r) {
 					shouldDump = true
 				}
 				if events && r == "events" {
