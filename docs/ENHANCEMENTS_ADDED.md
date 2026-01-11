@@ -8,15 +8,20 @@ Based on comprehensive Kubernetes pentest research, we've added several critical
 **Priority: CRITICAL**
 
 Automatically analyzes pod configurations for dangerous security settings:
-- **Privileged pods** - Can escape container boundaries
-- **HostNetwork pods** - Share host network namespace
-- **HostPID pods** - Can see host processes
-- **HostPath mounts** - Dangerous filesystem mounts (/, /var/lib/kubelet, etc.)
-- **Dangerous capabilities** - SYS_ADMIN, NET_ADMIN, SYS_PTRACE, etc.
-- **RunAsRoot** - Pods running as root (UID 0)
-- **AllowPrivilegeEscalation** - Can escalate privileges
+- **Privileged pods** - Can escape container boundaries and gain host root access
+- **HostNetwork pods** - Share host network namespace, bypass NetworkPolicies, can intercept traffic
+- **HostPID pods** - Can see all host processes, steal credentials from process environments
+- **HostIPC pods** - Can access shared memory and IPC facilities (`/dev/shm`, message queues)
+- **HostPath mounts** - Dangerous filesystem mounts (/, /var/lib/kubelet, /etc/kubernetes, etc.)
+- **Dangerous capabilities** - SYS_ADMIN, NET_ADMIN, SYS_PTRACE, SYS_MODULE, DAC_OVERRIDE
+- **RunAsRoot** - Pods running as root (UID 0), increases attack surface
+- **AllowPrivilegeEscalation** - Can gain additional capabilities via setuid binaries
+
+**Real-world impact:** These misconfigurations can lead to container escape, node compromise, credential theft, and cluster-wide access. See [docs/DETECTIONS.md](DETECTIONS.md) for detailed explanations.
 
 **Usage:** Automatically runs when `--dump` is used and you have pod read permissions.
+
+**Reference:** [Bishop Fox Bad Pods Research](https://bishopfox.com/blog/kubernetes-pod-privilege-escalation)
 
 ### 2. **Cluster Information Discovery** (`internal/discovery/cluster.go`)
 **Priority: HIGH**

@@ -113,11 +113,15 @@ Automatically detects:
 - 🟡 **Interesting**: configmaps (read), serviceaccounts (read), ingresses (create), networkpolicies (create)
 
 **Additional Analysis:**
-- Pod security context analysis (privileged, hostNetwork, hostPath mounts, capabilities)
-- Service Account token extraction and validation
-- High-privilege ServiceAccount detection
-- Cluster-admin binding discovery
-- Network service discovery and exposure analysis
+- **Pod security context analysis** - Detects privileged, hostNetwork, hostPID, hostIPC, dangerous hostPath mounts, dangerous capabilities, runAsRoot, and allowPrivilegeEscalation pods
+- **Service Account token extraction** - Extracts and validates SA tokens from secrets
+- **High-privilege ServiceAccount detection** - Identifies potentially dangerous ServiceAccount names
+- **RBAC analysis** - Finds cluster-admin bindings and wildcard roles
+- **Network service discovery** - Analyzes service exposure and network policies
+- **Event analysis** (optional, `--events`) - Analyzes security-relevant Kubernetes events
+- **NetworkPolicy analysis** (optional, `--network-policies`) - Identifies missing or misconfigured NetworkPolicies
+
+**See [docs/DETECTIONS.md](docs/DETECTIONS.md) for detailed explanations of what each detection means and real-world security impact.**
 
 ### Output Formats
 

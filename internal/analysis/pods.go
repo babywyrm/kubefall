@@ -9,6 +9,7 @@ type PodSecurityAnalysis struct {
 	PrivilegedPods    []PodInfo
 	HostNetworkPods   []PodInfo
 	HostPIDPods       []PodInfo
+	HostIPCPods       []PodInfo
 	HostPathMounts    []PodHostPath
 	DangerousCaps     []PodCapability
 	RunAsRoot         []PodInfo
@@ -38,6 +39,7 @@ func AnalyzePodSecurity(podsData string) *PodSecurityAnalysis {
 		PrivilegedPods:  []PodInfo{},
 		HostNetworkPods: []PodInfo{},
 		HostPIDPods:     []PodInfo{},
+		HostIPCPods:     []PodInfo{},
 		HostPathMounts:  []PodHostPath{},
 		DangerousCaps:   []PodCapability{},
 		RunAsRoot:       []PodInfo{},
@@ -54,6 +56,7 @@ func AnalyzePodSecurity(podsData string) *PodSecurityAnalysis {
 				ServiceAccountName string `json:"serviceAccountName"`
 				HostNetwork        bool   `json:"hostNetwork"`
 				HostPID            bool   `json:"hostPID"`
+				HostIPC            bool   `json:"hostIPC"`
 				Containers         []struct {
 					Image string `json:"image"`
 					SecurityContext struct {
@@ -94,6 +97,10 @@ func AnalyzePodSecurity(podsData string) *PodSecurityAnalysis {
 
 		if pod.Spec.HostPID {
 			analysis.HostPIDPods = append(analysis.HostPIDPods, podInfo)
+		}
+
+		if pod.Spec.HostIPC {
+			analysis.HostIPCPods = append(analysis.HostIPCPods, podInfo)
 		}
 
 		for _, vol := range pod.Spec.Volumes {

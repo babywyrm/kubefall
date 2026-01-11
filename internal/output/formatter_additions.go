@@ -183,6 +183,26 @@ func (f *Formatter) printPodSecurity(w io.Writer, results *rbac.Results) {
 					fmt.Fprintf(w, "\n")
 				}
 
+				if len(analysis.HostPIDPods) > 0 {
+					hasFindings = true
+					nsFindings = true
+					fmt.Fprintf(w, "  %s[%s] %s📋 HOST PID PODS:%s\n", colorYellow, ns, colorBold, colorReset)
+					for _, pod := range analysis.HostPIDPods {
+						fmt.Fprintf(w, "    • %s%s%s\n", colorBold, pod.Name, colorReset)
+					}
+					fmt.Fprintf(w, "\n")
+				}
+
+				if len(analysis.HostIPCPods) > 0 {
+					hasFindings = true
+					nsFindings = true
+					fmt.Fprintf(w, "  %s[%s] %s📡 HOST IPC PODS:%s\n", colorYellow, ns, colorBold, colorReset)
+					for _, pod := range analysis.HostIPCPods {
+						fmt.Fprintf(w, "    • %s%s%s\n", colorBold, pod.Name, colorReset)
+					}
+					fmt.Fprintf(w, "\n")
+				}
+
 				if len(analysis.HostPathMounts) > 0 {
 					hasFindings = true
 					nsFindings = true
