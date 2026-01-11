@@ -7,10 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 const (
@@ -68,6 +70,8 @@ type Enumerator struct {
 	namespace string
 	claims    map[string]interface{}
 	verbose   bool
+	consecutiveFailures int // Track consecutive failures for early bailout
+	maxConsecutiveFailures int
 }
 
 type Results struct {
@@ -139,8 +143,14 @@ func NewEnumerator(verbose bool) (*Enumerator, error) {
 
 	caPool := x509.NewCertPool()
 	caPool.AppendCertsFromPEM(caCertData)
-	tr := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: caPool}}
-	client := &http.Client{Transport: tr}
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: caPool},
+		ResponseHeaderTimeout: 10 * time.Second,
+	}
+	client := &http.Client{
+		Transport: tr,
+		Timeout: 10 * time.Second,
+	}
 
 	claims := decodeJWT(strings.TrimSpace(string(token)))
 
@@ -150,6 +160,8 @@ func NewEnumerator(verbose bool) (*Enumerator, error) {
 		namespace: strings.TrimSpace(string(namespace)),
 		claims:    claims,
 		verbose:   verbose,
+		consecutiveFailures: 0,
+		maxConsecutiveFailures: 10, // Bail out after 10 consecutive failures
 	}, nil
 }
 
@@ -197,6 +209,11 @@ func (e *Enumerator) Enumerate(dump bool, events bool) (*Results, error) {
 	if e.verbose {
 		fmt.Fprintf(os.Stderr, "[*] Discovered %d namespace(s): %s\n", len(namespaces), strings.Join(namespaces, ", "))
 	}
+	
+	// Check if we already hit the failure threshold from getNamespaces
+	if e.consecutiveFailures >= e.maxConsecutiveFailures {
+		return nil, fmt.Errorf("API server appears unresponsive (%d consecutive failures). Check cluster health", e.maxConsecutiveFailures)
+	}
 
 	results := &Results{
 		Namespace: e.namespace,
@@ -223,6 +240,16 @@ func (e *Enumerator) Enumerate(dump bool, events bool) (*Results, error) {
 		}
 
 		for _, r := range nsResources {
+			// Check for early bailout
+			if e.consecutiveFailures >= e.maxConsecutiveFailures {
+				if e.verbose {
+					fmt.Fprintf(os.Stderr, "\n[!] ERROR: Too many consecutive API failures (%d)\n", e.consecutiveFailures)
+					fmt.Fprintf(os.Stderr, "[!] API server appears unresponsive. Aborting enumeration.\n")
+					fmt.Fprintf(os.Stderr, "[!] Check cluster health: 'kubectl get nodes' and 'systemctl status k3s'\n")
+				}
+				return nil, fmt.Errorf("API server unresponsive: %d consecutive failures detected", e.consecutiveFailures)
+			}
+			
 			if e.verbose {
 				fmt.Fprintf(os.Stderr, "  [*] Checking resource: %s\n", r)
 			}
@@ -291,6 +318,16 @@ func (e *Enumerator) Enumerate(dump bool, events bool) (*Results, error) {
 		fmt.Fprintf(os.Stderr, "\n[*] Enumerating cluster resources...\n")
 	}
 		for _, r := range clusterResources {
+			// Check for early bailout
+			if e.consecutiveFailures >= e.maxConsecutiveFailures {
+				if e.verbose {
+					fmt.Fprintf(os.Stderr, "\n[!] ERROR: Too many consecutive API failures (%d)\n", e.consecutiveFailures)
+					fmt.Fprintf(os.Stderr, "[!] API server appears unresponsive. Aborting enumeration.\n")
+					fmt.Fprintf(os.Stderr, "[!] Check cluster health: 'kubectl get nodes' and 'systemctl status k3s'\n")
+				}
+				return nil, fmt.Errorf("API server unresponsive: %d consecutive failures detected", e.consecutiveFailures)
+			}
+			
 			if e.verbose {
 				fmt.Fprintf(os.Stderr, "  [*] Checking resource: %s\n", r)
 			}
@@ -328,7 +365,67 @@ func (e *Enumerator) Enumerate(dump bool, events bool) (*Results, error) {
 	return results, nil
 }
 
+// doHTTPRequestWithRetry performs an HTTP request with exponential backoff retry
+func (e *Enumerator) doHTTPRequestWithRetry(method, url string, body []byte, headers map[string]string, maxRetries int) (*http.Response, error) {
+	var lastErr error
+	baseDelay := 100 * time.Millisecond
+	
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+			delay := baseDelay * time.Duration(1<<uint(attempt-1))
+			if delay > 2*time.Second {
+				delay = 2 * time.Second
+			}
+			time.Sleep(delay)
+		}
+		
+		// Create a new request for each retry attempt
+		var reqBody io.Reader
+		if len(body) > 0 {
+			reqBody = bytes.NewBuffer(body)
+		}
+		req, err := http.NewRequest(method, url, reqBody)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		
+		// Set headers
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		
+		resp, err := e.client.Do(req)
+		if err == nil && resp.StatusCode < 500 {
+			e.consecutiveFailures = 0 // Reset on success
+			return resp, nil
+		}
+		
+		if err != nil {
+			lastErr = err
+		} else {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+		}
+		
+		e.consecutiveFailures++
+		
+		// Check if we should bail out early
+		if e.consecutiveFailures >= e.maxConsecutiveFailures {
+			return nil, fmt.Errorf("too many consecutive failures (%d): API server appears unresponsive: %w", e.consecutiveFailures, lastErr)
+		}
+	}
+	
+	return nil, fmt.Errorf("request failed after %d attempts: %w", maxRetries, lastErr)
+}
+
 func (e *Enumerator) checkAccess(resource, verb, namespace string) bool {
+	// Check if we've hit the failure threshold
+	if e.consecutiveFailures >= e.maxConsecutiveFailures {
+		return false
+	}
+	
 	payload := ssarSpec{
 		Kind:       "SelfSubjectAccessReview",
 		APIVersion: "authorization.k8s.io/v1",
@@ -340,15 +437,25 @@ func (e *Enumerator) checkAccess(resource, verb, namespace string) bool {
 	}
 
 	data, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", apiServer+"/apis/authorization.k8s.io/v1/selfsubjectaccessreviews", bytes.NewBuffer(data))
-	req.Header.Set("Authorization", "Bearer "+e.token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := e.client.Do(req)
+	headers := map[string]string{
+		"Authorization": "Bearer " + e.token,
+		"Content-Type":  "application/json",
+	}
+	
+	resp, err := e.doHTTPRequestWithRetry("POST", apiServer+"/apis/authorization.k8s.io/v1/selfsubjectaccessreviews", data, headers, 3)
 	if err != nil {
+		if e.verbose && e.consecutiveFailures >= e.maxConsecutiveFailures {
+			fmt.Fprintf(os.Stderr, "[!] ERROR: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[!] Bailing out due to API server issues\n")
+		}
 		return false
 	}
 	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 && resp.StatusCode != 201 {
+		return false
+	}
+	
 	body, _ := ioutil.ReadAll(resp.Body)
 
 	var out ssarResponse
@@ -363,10 +470,10 @@ func (e *Enumerator) getNamespaces() []string {
 		return []string{e.namespace}
 	}
 
-	req, _ := http.NewRequest("GET", apiServer+"/api/v1/namespaces", nil)
-	req.Header.Set("Authorization", "Bearer "+e.token)
-
-	resp, err := e.client.Do(req)
+	headers := map[string]string{
+		"Authorization": "Bearer " + e.token,
+	}
+	resp, err := e.doHTTPRequestWithRetry("GET", apiServer+"/api/v1/namespaces", nil, headers, 3)
 	if err != nil {
 		return []string{e.namespace}
 	}
