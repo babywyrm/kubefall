@@ -13,10 +13,10 @@ import (
 // filterFindings filters findings by severity
 func (f *Formatter) filterFindings(findings Findings) Findings {
 	filtered := Findings{
-		Critical:   []Finding{},
-		High:       []Finding{},
+		Critical:    []Finding{},
+		High:        []Finding{},
 		Interesting: []Finding{},
-		Normal:     []Finding{},
+		Normal:      []Finding{},
 	}
 
 	severityMap := make(map[string]bool)
@@ -91,7 +91,7 @@ func (f *Formatter) OutputMarkdown(results *rbac.Results, w io.Writer) {
 	}
 
 	fmt.Fprintf(w, "# kubefall - Kubernetes RBAC Enumeration\n\n")
-	
+
 	if results.Context != nil {
 		if ctx, ok := results.Context.(*context.Context); ok {
 			fmt.Fprintf(w, "**Environment:** %s", ctx.Type)
@@ -104,7 +104,7 @@ func (f *Formatter) OutputMarkdown(results *rbac.Results, w io.Writer) {
 
 	if len(findings.Critical) > 0 {
 		fmt.Fprintf(w, "## 🔴 Critical Findings\n\n")
-		
+
 		for _, finding := range findings.Critical {
 			fmt.Fprintf(w, "### CRITICAL: %s in %s\n\n", finding.Resource, finding.Namespace)
 			fmt.Fprintf(w, "- **Verbs:** %s\n", strings.Join(finding.Verbs, ", "))
@@ -118,7 +118,7 @@ func (f *Formatter) OutputMarkdown(results *rbac.Results, w io.Writer) {
 
 	if len(findings.High) > 0 {
 		fmt.Fprintf(w, "## 🟠 High Severity Findings\n\n")
-		
+
 		for _, finding := range findings.High {
 			fmt.Fprintf(w, "### HIGH: %s in %s\n\n", finding.Resource, finding.Namespace)
 			fmt.Fprintf(w, "- **Verbs:** %s\n", strings.Join(finding.Verbs, ", "))
@@ -167,7 +167,7 @@ func (f *Formatter) OutputHTML(results *rbac.Results, w io.Writer) {
 	if len(findings.Critical) > 0 {
 		fmt.Fprintf(w, "    <h2>🔴 Critical Findings</h2>\n    <table>\n")
 		fmt.Fprintf(w, "        <tr><th>Severity</th><th>Resource</th><th>Namespace</th><th>Verbs</th><th>Message</th></tr>\n")
-		
+
 		for _, finding := range findings.Critical {
 			fmt.Fprintf(w, "        <tr class=\"critical\">\n")
 			fmt.Fprintf(w, "            <td>CRITICAL</td>\n")
@@ -183,7 +183,7 @@ func (f *Formatter) OutputHTML(results *rbac.Results, w io.Writer) {
 	if len(findings.High) > 0 {
 		fmt.Fprintf(w, "    <h2>🟠 High Severity Findings</h2>\n    <table>\n")
 		fmt.Fprintf(w, "        <tr><th>Severity</th><th>Resource</th><th>Namespace</th><th>Verbs</th><th>Message</th></tr>\n")
-		
+
 		for _, finding := range findings.High {
 			fmt.Fprintf(w, "        <tr class=\"high\">\n")
 			fmt.Fprintf(w, "            <td>HIGH</td>\n")
@@ -200,4 +200,3 @@ func (f *Formatter) OutputHTML(results *rbac.Results, w io.Writer) {
 </html>
 `)
 }
-

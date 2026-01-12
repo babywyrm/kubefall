@@ -1,17 +1,16 @@
 package context
 
 import (
-	"io/ioutil"
 	"os"
 	"strings"
 )
 
 // Context represents the detected Kubernetes environment
 type Context struct {
-	Type        string            // k3s, eks, gke, aks, vanilla
-	Distribution string           // k3s, k8s, etc.
-	Cloud       string            // aws, gcp, azure, none
-	Metadata    map[string]string // Additional metadata
+	Type         string            // k3s, eks, gke, aks, vanilla
+	Distribution string            // k3s, k8s, etc.
+	Cloud        string            // aws, gcp, azure, none
+	Metadata     map[string]string // Additional metadata
 }
 
 // Detect attempts to identify the Kubernetes environment
@@ -209,7 +208,7 @@ func CheckHost() bool {
 	}
 
 	// Check cgroup
-	if data, err := ioutil.ReadFile("/proc/self/cgroup"); err == nil {
+	if data, err := os.ReadFile("/proc/self/cgroup"); err == nil {
 		if strings.Contains(string(data), "docker") || strings.Contains(string(data), "containerd") {
 			return false
 		}
@@ -217,4 +216,3 @@ func CheckHost() bool {
 
 	return true
 }
-

@@ -12,8 +12,8 @@ type NetworkPolicyAnalysis struct {
 }
 
 type NetworkPolicyInfo struct {
-	Name      string
-	Namespace string
+	Name        string
+	Namespace   string
 	PolicyTypes []string
 }
 
@@ -45,7 +45,7 @@ func AnalyzeNetworkPolicies(allNamespaceDumps map[string]string, allNamespaces [
 					} `json:"podSelector"`
 					PolicyTypes []string `json:"policyTypes"`
 					Ingress     []struct {
-						From []interface{} `json:"from"`
+						From  []interface{} `json:"from"`
 						Ports []interface{} `json:"ports"`
 					} `json:"ingress"`
 					Egress []struct {
@@ -66,8 +66,8 @@ func AnalyzeNetworkPolicies(allNamespaceDumps map[string]string, allNamespaces [
 
 		for _, np := range npList.Items {
 			npInfo := NetworkPolicyInfo{
-				Name:       np.Metadata.Name,
-				Namespace:  np.Metadata.Namespace,
+				Name:        np.Metadata.Name,
+				Namespace:   np.Metadata.Namespace,
 				PolicyTypes: np.Spec.PolicyTypes,
 			}
 
@@ -106,4 +106,3 @@ func AnalyzeNetworkPolicies(allNamespaceDumps map[string]string, allNamespaces [
 
 	return analysis
 }
-

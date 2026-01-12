@@ -6,14 +6,14 @@ import (
 )
 
 type PodSecurityAnalysis struct {
-	PrivilegedPods    []PodInfo
-	HostNetworkPods   []PodInfo
-	HostPIDPods       []PodInfo
-	HostIPCPods       []PodInfo
-	HostPathMounts    []PodHostPath
-	DangerousCaps     []PodCapability
-	RunAsRoot         []PodInfo
-	AllowEscalation   []PodInfo
+	PrivilegedPods  []PodInfo
+	HostNetworkPods []PodInfo
+	HostPIDPods     []PodInfo
+	HostIPCPods     []PodInfo
+	HostPathMounts  []PodHostPath
+	DangerousCaps   []PodCapability
+	RunAsRoot       []PodInfo
+	AllowEscalation []PodInfo
 }
 
 type PodInfo struct {
@@ -25,8 +25,8 @@ type PodInfo struct {
 
 type PodHostPath struct {
 	PodInfo
-	Path      string
-	ReadOnly  bool
+	Path     string
+	ReadOnly bool
 }
 
 type PodCapability struct {
@@ -58,12 +58,12 @@ func AnalyzePodSecurity(podsData string) *PodSecurityAnalysis {
 				HostPID            bool   `json:"hostPID"`
 				HostIPC            bool   `json:"hostIPC"`
 				Containers         []struct {
-					Image string `json:"image"`
+					Image           string `json:"image"`
 					SecurityContext struct {
-						Privileged                *bool    `json:"privileged"`
-						RunAsUser                 *int64   `json:"runAsUser"`
-						AllowPrivilegeEscalation  *bool    `json:"allowPrivilegeEscalation"`
-						Capabilities              struct {
+						Privileged               *bool  `json:"privileged"`
+						RunAsUser                *int64 `json:"runAsUser"`
+						AllowPrivilegeEscalation *bool  `json:"allowPrivilegeEscalation"`
+						Capabilities             struct {
 							Add []string `json:"add"`
 						} `json:"capabilities"`
 					} `json:"securityContext"`
@@ -152,4 +152,3 @@ func AnalyzePodSecurity(podsData string) *PodSecurityAnalysis {
 
 	return analysis
 }
-

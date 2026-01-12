@@ -8,27 +8,27 @@ import (
 
 // EventAnalysis contains security-relevant findings from Kubernetes events
 type EventAnalysis struct {
-	FailedAuth       []SecurityEvent
-	SecretAccess    []SecurityEvent
-	PodCreations    []SecurityEvent
-	RBACChanges     []SecurityEvent
+	FailedAuth        []SecurityEvent
+	SecretAccess      []SecurityEvent
+	PodCreations      []SecurityEvent
+	RBACChanges       []SecurityEvent
 	ImagePullFailures []SecurityEvent
 	NetworkViolations []SecurityEvent
-	RecentEvents    []SecurityEvent
+	RecentEvents      []SecurityEvent
 }
 
 // SecurityEvent represents a security-relevant Kubernetes event
 type SecurityEvent struct {
-	Namespace     string
-	Name          string
-	Type          string // Normal, Warning
-	Reason        string
-	Message       string
-	InvolvedKind  string
-	InvolvedName  string
-	FirstSeen     time.Time
-	LastSeen      time.Time
-	Count         int
+	Namespace    string
+	Name         string
+	Type         string // Normal, Warning
+	Reason       string
+	Message      string
+	InvolvedKind string
+	InvolvedName string
+	FirstSeen    time.Time
+	LastSeen     time.Time
+	Count        int
 }
 
 // AnalyzeEvents parses Kubernetes events JSON and extracts security-relevant patterns
@@ -55,9 +55,9 @@ func AnalyzeEvents(eventsData string, sinceDuration time.Duration) *EventAnalysi
 				Namespace         string `json:"namespace"`
 				CreationTimestamp string `json:"creationTimestamp"`
 			} `json:"metadata"`
-			Type      string `json:"type"` // Normal or Warning
-			Reason    string `json:"reason"`
-			Message   string `json:"message"`
+			Type           string `json:"type"` // Normal or Warning
+			Reason         string `json:"reason"`
+			Message        string `json:"message"`
 			InvolvedObject struct {
 				Kind      string `json:"kind"`
 				Name      string `json:"name"`
@@ -203,4 +203,3 @@ func AnalyzeEvents(eventsData string, sinceDuration time.Duration) *EventAnalysi
 
 	return analysis
 }
-

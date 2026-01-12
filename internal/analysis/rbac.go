@@ -14,9 +14,9 @@ type RBACAnalysis struct {
 }
 
 type ClusterAdminBinding struct {
-	Name       string
-	Role       string
-	Subjects   []Subject
+	Name     string
+	Role     string
+	Subjects []Subject
 }
 
 type Subject struct {
@@ -169,5 +169,3 @@ func AnalyzeClusterRoles(rolesData string) *RBACAnalysis {
 
 	return analysis
 }
-
-

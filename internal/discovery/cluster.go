@@ -3,25 +3,25 @@ package discovery
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 )
 
 const apiServerCluster = "https://kubernetes.default.svc"
 
 type ClusterInfo struct {
-	Version string
-	Major   string
-	Minor   string
-	Git     string
+	Version  string
+	Major    string
+	Minor    string
+	Git      string
 	Platform string
 }
 
 type NodeInfo struct {
-	Name           string
-	KubeletVersion string
-	OSImage        string
-	Architecture   string
+	Name             string
+	KubeletVersion   string
+	OSImage          string
+	Architecture     string
 	ContainerRuntime string
 }
 
@@ -40,7 +40,7 @@ func DiscoverClusterVersion(client *http.Client, token string) (*ClusterInfo, er
 		return nil, fmt.Errorf("failed to get version: %d", resp.StatusCode)
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	var version struct {
 		Major      string `json:"major"`
 		Minor      string `json:"minor"`
@@ -76,7 +76,7 @@ func DiscoverNodes(client *http.Client, token string) ([]NodeInfo, error) {
 		return nil, fmt.Errorf("failed to get nodes: %d", resp.StatusCode)
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	var nodeList struct {
 		Items []struct {
 			Metadata struct {
@@ -84,9 +84,9 @@ func DiscoverNodes(client *http.Client, token string) ([]NodeInfo, error) {
 			} `json:"metadata"`
 			Status struct {
 				NodeInfo struct {
-					KubeletVersion     string `json:"kubeletVersion"`
-					OSImage            string `json:"osImage"`
-					Architecture       string `json:"architecture"`
+					KubeletVersion          string `json:"kubeletVersion"`
+					OSImage                 string `json:"osImage"`
+					Architecture            string `json:"architecture"`
 					ContainerRuntimeVersion string `json:"containerRuntimeVersion"`
 				} `json:"nodeInfo"`
 			} `json:"status"`
@@ -110,4 +110,3 @@ func DiscoverNodes(client *http.Client, token string) ([]NodeInfo, error) {
 
 	return nodes, nil
 }
-

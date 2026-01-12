@@ -49,24 +49,24 @@ func ParseMode(s string) Mode {
 }
 
 type Formatter struct {
-	mode          Mode
-	explain       bool
-	full          bool
-	noColor       bool
-	summaryOnly   bool
+	mode           Mode
+	explain        bool
+	full           bool
+	noColor        bool
+	summaryOnly    bool
 	severityFilter []string
-	eventsLimit   int
+	eventsLimit    int
 }
 
 func NewFormatter(mode Mode, explain bool, full bool, noColor bool, summaryOnly bool, severityFilter []string, eventsLimit int) *Formatter {
 	return &Formatter{
-		mode:          mode,
-		explain:       explain,
-		full:          full,
-		noColor:       noColor,
-		summaryOnly:   summaryOnly,
+		mode:           mode,
+		explain:        explain,
+		full:           full,
+		noColor:        noColor,
+		summaryOnly:    summaryOnly,
 		severityFilter: severityFilter,
-		eventsLimit:   eventsLimit,
+		eventsLimit:    eventsLimit,
 	}
 }
 
@@ -80,24 +80,24 @@ func (f *Formatter) OutputJSON(results *rbac.Results, w io.Writer) {
 }
 
 type Finding struct {
-	Severity   string
-	Resource   string
-	Namespace  string
-	Verbs      []string
-	Message    string
+	Severity    string
+	Resource    string
+	Namespace   string
+	Verbs       []string
+	Message     string
 	Explanation string
 }
 
 type Findings struct {
-	Critical   []Finding
-	High       []Finding
+	Critical    []Finding
+	High        []Finding
 	Interesting []Finding
-	Normal     []Finding
+	Normal      []Finding
 }
 
 func (f *Formatter) OutputHuman(results *rbac.Results, w io.Writer) {
 	findings := f.collectFindings(results)
-	
+
 	// Apply severity filter
 	if len(f.severityFilter) > 0 {
 		findings = f.filterFindings(findings)
@@ -167,8 +167,8 @@ func (f *Formatter) printCriticalFindings(w io.Writer, findings Findings) {
 	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", f.getColor(colorRed), f.getColor(colorReset))
 
 	for _, finding := range findings.Critical {
-		fmt.Fprintf(w, "%s[CRITICAL]%s %s%s%s in %s%s%s\n", 
-			f.getColor(colorRed), f.getColor(colorReset), f.getColor(colorBold), finding.Resource, f.getColor(colorReset), 
+		fmt.Fprintf(w, "%s[CRITICAL]%s %s%s%s in %s%s%s\n",
+			f.getColor(colorRed), f.getColor(colorReset), f.getColor(colorBold), finding.Resource, f.getColor(colorReset),
 			f.getColor(colorYellow), finding.Namespace, f.getColor(colorReset))
 		fmt.Fprintf(w, "         Verbs: %s%s%s\n", f.getColor(colorBold), strings.Join(finding.Verbs, ", "), f.getColor(colorReset))
 		fmt.Fprintf(w, "         %s%s%s\n", f.getColor(colorRed), finding.Message, f.getColor(colorReset))
@@ -189,8 +189,8 @@ func (f *Formatter) printHighFindings(w io.Writer, findings Findings) {
 	fmt.Fprintf(w, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", f.getColor(colorYellow), f.getColor(colorReset))
 
 	for _, finding := range findings.High {
-		fmt.Fprintf(w, "%s[HIGH]%s     %s%s%s in %s%s%s\n", 
-			f.getColor(colorYellow), f.getColor(colorReset), f.getColor(colorBold), finding.Resource, f.getColor(colorReset), 
+		fmt.Fprintf(w, "%s[HIGH]%s     %s%s%s in %s%s%s\n",
+			f.getColor(colorYellow), f.getColor(colorReset), f.getColor(colorBold), finding.Resource, f.getColor(colorReset),
 			f.getColor(colorYellow), finding.Namespace, f.getColor(colorReset))
 		fmt.Fprintf(w, "         Verbs: %s%s%s\n", f.getColor(colorBold), strings.Join(finding.Verbs, ", "), f.getColor(colorReset))
 		fmt.Fprintf(w, "         %s%s%s\n", f.getColor(colorYellow), finding.Message, f.getColor(colorReset))
@@ -208,7 +208,7 @@ func (f *Formatter) printDetailedResults(w io.Writer, results *rbac.Results, fin
 		fmt.Fprintf(w, "%s═══════════════════════════════════════════════════════════%s\n\n", colorYellow, colorReset)
 
 		for _, finding := range findings.Interesting {
-			fmt.Fprintf(w, "%s[!]%s %s%s%s (%s) - %s\n", 
+			fmt.Fprintf(w, "%s[!]%s %s%s%s (%s) - %s\n",
 				colorYellow, colorReset, colorBold, finding.Resource, colorReset,
 				finding.Namespace, finding.Message)
 		}
@@ -228,14 +228,14 @@ func (f *Formatter) printDetailedResults(w io.Writer, results *rbac.Results, fin
 			continue
 		}
 
-		fmt.Fprintf(w, "%s┌─ Namespace: %s%s%s ───────────────────────────────────────────┐%s\n", 
+		fmt.Fprintf(w, "%s┌─ Namespace: %s%s%s ───────────────────────────────────────────┐%s\n",
 			colorBold, colorBlue, ns, colorReset, colorReset)
-		
+
 		for _, res := range resources {
 			verbs := perms.Resources[res]
 			severity := f.getSeverity(res, verbs, ns, findings)
 			verbStr := strings.Join(verbs, ",")
-			
+
 			var color string
 			switch severity {
 			case "critical":
@@ -248,11 +248,11 @@ func (f *Formatter) printDetailedResults(w io.Writer, results *rbac.Results, fin
 				color = colorGreen
 			}
 
-			fmt.Fprintf(w, "│ %s%-20s%s %s%-30s%s │\n", 
+			fmt.Fprintf(w, "│ %s%-20s%s %s%-30s%s │\n",
 				colorBold, res, colorReset, color, verbStr, colorReset)
 
 			if dump, ok := perms.Dumps[res]; ok && dump != "" {
-				fmt.Fprintf(w, "│ %s[DUMP AVAILABLE]%s %s%s%s                              │\n", 
+				fmt.Fprintf(w, "│ %s[DUMP AVAILABLE]%s %s%s%s                              │\n",
 					colorYellow, colorReset, colorBold, res, colorReset)
 			}
 		}
@@ -268,7 +268,7 @@ func (f *Formatter) printDetailedResults(w io.Writer, results *rbac.Results, fin
 		for _, res := range resources {
 			verbs := results.Permissions.Cluster.Resources[res]
 			severity := f.getSeverity(res, verbs, "", findings)
-			
+
 			var color string
 			switch severity {
 			case "critical":
@@ -281,7 +281,7 @@ func (f *Formatter) printDetailedResults(w io.Writer, results *rbac.Results, fin
 				color = colorGreen
 			}
 
-			fmt.Fprintf(w, "  %s%-25s%s %s%s%s\n", 
+			fmt.Fprintf(w, "  %s%-25s%s %s%s%s\n",
 				colorBold, res, colorReset, color, strings.Join(verbs, ","), colorReset)
 		}
 		fmt.Fprintf(w, "\n")
@@ -307,11 +307,11 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 			parts := strings.Split(key, "/")
 			ns := parts[0]
 			resType := parts[1]
-			
+
 			fmt.Fprintf(w, "%s[%s]%s %s(%s)%s\n", colorYellow, key, colorReset, colorBlue, resType, colorReset)
-			
+
 			hasData := false
-			
+
 			if len(ext.Tokens) > 0 {
 				hasData = true
 				fmt.Fprintf(w, "  %s🔑 Tokens Found:%s\n", colorBold, colorReset)
@@ -331,8 +331,8 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 				hasData = true
 				fmt.Fprintf(w, "  %s🔐 Credentials Found:%s\n", colorBold, colorReset)
 				for _, cred := range ext.Credentials {
-					fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
-						colorBold, cred.Type, colorReset, 
+					fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n",
+						colorBold, cred.Type, colorReset,
 						colorYellow, cred.Key, colorReset)
 				}
 			}
@@ -358,7 +358,7 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 						fmt.Fprintf(w, "\n")
 					} else {
 						preview := truncate(b64.Decoded, 80)
-						fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
+						fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n",
 							colorBold, b64.Key, colorReset,
 							colorYellow, preview, colorReset)
 					}
@@ -371,14 +371,14 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 				count := 0
 				for k, v := range ext.EnvVars {
 					if f.full {
-						fmt.Fprintf(w, "    %s%s%s: %s%s%s\n", 
-							colorBold, k, colorReset, 
+						fmt.Fprintf(w, "    %s%s%s: %s%s%s\n",
+							colorBold, k, colorReset,
 							colorYellow, v, colorReset)
 					} else {
 						if count < 10 {
 							preview := truncate(v, 60)
-							fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
-								colorBold, k, colorReset, 
+							fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n",
+								colorBold, k, colorReset,
 								colorYellow, preview, colorReset)
 							count++
 						}
@@ -404,8 +404,8 @@ func (f *Formatter) printExtractedData(w io.Writer, results *rbac.Results) {
 						} else {
 							if count < 15 {
 								preview := truncate(v, 80)
-								fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n", 
-									colorBold, k, colorReset, 
+								fmt.Fprintf(w, "    • %s%s%s: %s%s%s\n",
+									colorBold, k, colorReset,
 									colorYellow, preview, colorReset)
 								count++
 							}
@@ -474,7 +474,7 @@ func (f *Formatter) printServices(w io.Writer, results *rbac.Results) {
 			for _, p := range svc.Ports {
 				ports = append(ports, fmt.Sprintf("%d/%s", p.Port, p.Protocol))
 			}
-			fmt.Fprintf(w, "    • %s%s%s (%s) - %s\n", 
+			fmt.Fprintf(w, "    • %s%s%s (%s) - %s\n",
 				colorBold, svc.Name, colorReset, svc.Type, strings.Join(ports, ", "))
 			if svc.Type == "NodePort" || svc.Type == "LoadBalancer" {
 				fmt.Fprintf(w, "      %s⚠️  Exposed externally!%s\n", colorYellow, colorReset)
@@ -504,7 +504,7 @@ func (f *Formatter) printSummaryWithNamespaces(w io.Writer, findings Findings, a
 	totalNormal := len(findings.Normal)
 
 	if totalCritical > 0 {
-		fmt.Fprintf(w, "%s[%d] CRITICAL%s - Immediate escalation paths available\n", 
+		fmt.Fprintf(w, "%s[%d] CRITICAL%s - Immediate escalation paths available\n",
 			f.getColor(colorRed), totalCritical, f.getColor(colorReset))
 		for _, finding := range findings.Critical {
 			fmt.Fprintf(w, "    • %s%s%s in %s\n", f.getColor(colorBold), finding.Resource, f.getColor(colorReset), finding.Namespace)
@@ -513,7 +513,7 @@ func (f *Formatter) printSummaryWithNamespaces(w io.Writer, findings Findings, a
 	}
 
 	if totalHigh > 0 {
-		fmt.Fprintf(w, "%s[%d] HIGH%s - Significant security risks\n", 
+		fmt.Fprintf(w, "%s[%d] HIGH%s - Significant security risks\n",
 			f.getColor(colorYellow), totalHigh, f.getColor(colorReset))
 		for _, finding := range findings.High {
 			fmt.Fprintf(w, "    • %s%s%s in %s\n", f.getColor(colorBold), finding.Resource, f.getColor(colorReset), finding.Namespace)
@@ -522,7 +522,7 @@ func (f *Formatter) printSummaryWithNamespaces(w io.Writer, findings Findings, a
 	}
 
 	if totalInteresting > 0 {
-		fmt.Fprintf(w, "%s[%d] INTERESTING%s - Potential data exfiltration or lateral movement\n", 
+		fmt.Fprintf(w, "%s[%d] INTERESTING%s - Potential data exfiltration or lateral movement\n",
 			f.getColor(colorYellow), totalInteresting, f.getColor(colorReset))
 		for _, finding := range findings.Interesting {
 			fmt.Fprintf(w, "    • %s%s%s in %s\n", f.getColor(colorBold), finding.Resource, f.getColor(colorReset), finding.Namespace)
@@ -531,7 +531,7 @@ func (f *Formatter) printSummaryWithNamespaces(w io.Writer, findings Findings, a
 	}
 
 	if totalNormal > 0 {
-		fmt.Fprintf(w, "%s[%d] NORMAL%s - Standard permissions\n\n", 
+		fmt.Fprintf(w, "%s[%d] NORMAL%s - Standard permissions\n\n",
 			f.getColor(colorGreen), totalNormal, f.getColor(colorReset))
 	}
 
@@ -594,17 +594,17 @@ func (f *Formatter) getEventSummary(eventAnalysisMap map[string]interface{}) Eve
 			summary.PodCreations += len(eventAnalysis.PodCreations)
 		}
 	}
-	summary.TotalEvents = summary.FailedAuth + summary.RBACChanges + summary.SecretAccess + 
+	summary.TotalEvents = summary.FailedAuth + summary.RBACChanges + summary.SecretAccess +
 		summary.ImagePullFailures + summary.PodCreations
 	return summary
 }
 
 func (f *Formatter) collectFindings(results *rbac.Results) Findings {
 	findings := Findings{
-		Critical:   []Finding{},
-		High:       []Finding{},
+		Critical:    []Finding{},
+		High:        []Finding{},
 		Interesting: []Finding{},
-		Normal:     []Finding{},
+		Normal:      []Finding{},
 	}
 
 	for ns, perms := range results.Permissions.Namespaces {
@@ -647,7 +647,7 @@ func (f *Formatter) collectFindings(results *rbac.Results) Findings {
 		severity, message, explanation := f.analyzeResource(resource, verbs)
 		finding := Finding{
 			Resource:    resource,
-			Namespace:  "cluster",
+			Namespace:   "cluster",
 			Verbs:       verbs,
 			Message:     message,
 			Explanation: explanation,

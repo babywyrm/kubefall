@@ -18,10 +18,10 @@ type ExtractedData struct {
 }
 
 type TokenInfo struct {
-	Type    string
-	Value   string
-	Valid   bool
-	Claims  map[string]interface{}
+	Type   string
+	Value  string
+	Valid  bool
+	Claims map[string]interface{}
 }
 
 type Credential struct {
@@ -31,8 +31,8 @@ type Credential struct {
 }
 
 type Base64Info struct {
-	Key   string
-	Data  string
+	Key     string
+	Data    string
 	Decoded string
 }
 
@@ -149,9 +149,9 @@ func (e *ExtractedData) analyzeValue(key, value string) {
 		})
 	}
 
-			if strings.Contains(lowerKey, "env") || strings.Contains(lowerKey, "config") {
-				e.EnvVars[key] = value
-			}
+	if strings.Contains(lowerKey, "env") || strings.Contains(lowerKey, "config") {
+		e.EnvVars[key] = value
+	}
 }
 
 func (e *ExtractedData) isToken(value string) bool {
@@ -184,7 +184,7 @@ func (e *ExtractedData) detectTokenType(value string) string {
 func (e *ExtractedData) isCredential(key, value string) bool {
 	lowerKey := strings.ToLower(key)
 	credentialKeys := []string{"password", "passwd", "pwd", "secret", "key", "token", "api_key", "apikey", "auth", "credential"}
-	
+
 	for _, credKey := range credentialKeys {
 		if strings.Contains(lowerKey, credKey) {
 			return true
@@ -240,4 +240,3 @@ func parseJWT(token string) map[string]interface{} {
 
 	return claims
 }
-

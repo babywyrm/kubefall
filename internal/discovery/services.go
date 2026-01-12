@@ -3,7 +3,7 @@ package discovery
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -42,7 +42,7 @@ func DiscoverServices(client *http.Client, token string, namespaces []string) ma
 			continue
 		}
 
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		var svcList struct {
 			Items []struct {
 				Metadata struct {
@@ -94,7 +94,7 @@ func FormatServiceAccess(services map[string][]ServiceInfo) string {
 
 	var output []string
 	output = append(output, "\n[NETWORK] Discovered Services:")
-	
+
 	for ns, svcs := range services {
 		output = append(output, fmt.Sprintf("  Namespace: %s", ns))
 		for _, svc := range svcs {
@@ -111,4 +111,3 @@ func FormatServiceAccess(services map[string][]ServiceInfo) string {
 
 	return strings.Join(output, "\n")
 }
-

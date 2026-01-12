@@ -13,12 +13,12 @@ type TokenExtraction struct {
 }
 
 type ServiceAccountToken struct {
-	Namespace     string
+	Namespace      string
 	ServiceAccount string
-	SecretName    string
-	Token         string
-	Valid         bool
-	Claims        map[string]interface{}
+	SecretName     string
+	Token          string
+	Valid          bool
+	Claims         map[string]interface{}
 }
 
 type ServiceAccountInfo struct {
@@ -211,5 +211,3 @@ func IsHighPrivilegeSA(saName string) bool {
 
 	return false
 }
-
-
